@@ -1,0 +1,47 @@
+baseURL = 'https://example.org/'
+languageCode = 'en-us'
+theme = 'hugo-coder'
+
+[markup.highlight]
+  style = "monokai"
+
+
+[params]
+    title = "Ahmed Sayed"
+    author = 'Ahmed Sayed'
+    info = 'Senior Software Engineer @ Babbel GmbH'
+    keywords = "blog,Software,personal"
+    license = "MIT"
+
+    avatarurl = "/images/avatar.jpeg"
+    colorScheme = "auto"
+    customCSS = ["css/extra-style.css"]
+
+[taxonomies]
+  category = "categories"
+  series = "series"
+  tag = "tags"
+  author = "authors"
+
+# Social links
+[[params.social]]
+  name = "Github"
+  icon = "fa-brands fa-github fa-2x"
+  weight = 1
+  url = "https://github.com/asayed18"
+
+[[params.social]]
+  name = "Github"
+  icon = "fa-brands fa-linkedin fa-2x"
+  weight = 1
+  url = "https://www.linkedin.com/in/a-abdelsalam?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app"
+
+[[params.social]]
+  name = "Gmail"
+  icon = "fa-brands fa-google fa-2x"
+  weight = 1
+  url = "mailto:engahmedabdelsalam918@gmail.com"
+
+[services]
+  [services.googleAnalytics]
+    ID = 'G-MEASUREMENT_ID'

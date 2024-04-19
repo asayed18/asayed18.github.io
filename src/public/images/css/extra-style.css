@@ -1,0 +1,4 @@
+.avatar img {
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Adds a basic shadow effect */
+  transform: translateZ(10px);
+}

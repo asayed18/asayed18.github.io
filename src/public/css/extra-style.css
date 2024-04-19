@@ -1,0 +1,19 @@
+.avatar img {
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Adds a basic shadow effect */
+  transform: translateZ(10px);
+  transition: box-shadow 0.3s ease, transform 0.3s ease, width 0.3s ease, height 0.3s ease; /* Adds transition effect */
+}
+
+.avatar img:hover {
+  box-shadow: 0 0 90px rgba(0, 0, 0, 0.5); /* Adds a basic shadow effect */
+  transform: translateZ(10px);
+  width: 110%; /* Increases the width of the image */
+  height: 110%; /* Increases the height of the image */
+}
+
+body {
+  /* background-image: url('/images/bg.jpeg'); */
+  background-size: cover; /* Ensures the background image covers the entire body */
+  background-position: center; /* Centers the background image */
+  background-repeat: no-repeat;
+}
