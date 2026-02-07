@@ -423,7 +423,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
         ) : <></>}
         <Vignette
           offset={theme === 'light' ? 0.45 : 0.25}
-          darkness={theme === 'light' ? 0.45 : 0.9}
+          darkness={theme === 'light' ? 0.45 : 0.5}
           blendFunction={BlendFunction.NORMAL}
         />
         <Noise
