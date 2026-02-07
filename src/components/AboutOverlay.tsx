@@ -25,16 +25,17 @@ export function AboutOverlay({ open, onClose }: AboutOverlayProps) {
         </div>
 
         <p className="about-bio">
-          I am a Senior Software Engineer with over 7 years of experience in
-          full-stack development, specializing in backend-heavy solutions,
-          scalable architectures, and modern web technologies. I enjoy solving
-          complex problems and building innovative solutions that make a real
-          impact.
+          I am a Senior Software Engineer with over 10 years of experience in
+          full-stack development, currently working at Forgent AI. I specialize
+          in backend-heavy solutions, scalable distributed architectures, and
+          modern web technologies. I enjoy tackling complex engineering
+          challenges and building high-impact systems that drive real business
+          value.
         </p>
 
         <ul className="about-facts">
           <li>Based in Berlin, Germany</li>
-          <li>Currently working at Babbel GmbH</li>
+          <li>Currently working at Forgent AI</li>
           <li>Learning Rust and exploring AI-driven systems</li>
           <li>Ask me about TypeScript, Python, AWS, and scalable system design</li>
           <li>Fun fact: I love hiking and exploring new cuisines</li>

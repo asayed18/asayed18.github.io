@@ -7,7 +7,7 @@ import type { Theme } from '../App'
 
 const ROAD_WIDTH = 10
 const SIDE_OFFSET = 8
-const COUNT_PER_SIDE = 200
+const COUNT_PER_SIDE = 120
 const BUILDING_WIDTH = 5
 
 const MONTH_MAP: Record<string, number> = {
@@ -452,25 +452,13 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
             distance={height * 3}
             decay={2}
             castShadow
-            shadow-mapSize-width={1024}
-            shadow-mapSize-height={1024}
+            shadow-mapSize-width={512}
+            shadow-mapSize-height={512}
             shadow-bias={-0.0005}
-            shadow-camera-near={0.3}
-            shadow-camera-far={height * 3}
+            shadow-camera-near={0.5}
+            shadow-camera-far={height * 2.5}
           />
-          {/* Road-side light — spills onto the road and opposite buildings */}
-          <pointLight
-            position={[x > 0 ? -width : width, height * 0.5, 0]}
-            color={isLight ? '#d0d0d0' : '#999999'}
-            intensity={isLight ? 2 : 3.5}
-            distance={height * 2.5}
-            decay={2}
-            castShadow
-            shadow-mapSize-width={1024}
-            shadow-mapSize-height={1024}
-            shadow-bias={-0.0005}
-          />
-          {/* Low ground-level fill — lights up the base and road surface */}
+          {/* Low ground-level fill — lights up the base and road (no shadow) */}
           <pointLight
             position={[0, 1, 0]}
             color={isLight ? '#cccccc' : '#888888'}
@@ -500,27 +488,22 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
         </mesh>
       ))}
 
-      {/* Per-floor window lights when active — light spills out and casts sharp shadows */}
-      {isActive && Array.from({ length: numFloors }, (_, floor) => {
-        const floorY = floor * floorHeight + floorHeight * 0.55
-        const roadDir = x > 0 ? -1 : 1
-        return (
-          <pointLight
-            key={`wl-${floor}`}
-            position={[roadDir * (width / 2 + 0.5), floorY, 0]}
-            color={isLight ? '#cccccc' : '#aaaaaa'}
-            intensity={isLight ? 0.5 : 1.0}
-            distance={8}
-            decay={2}
-            castShadow
-            shadow-mapSize-width={512}
-            shadow-mapSize-height={512}
-            shadow-bias={-0.0005}
-            shadow-camera-near={0.2}
-            shadow-camera-far={8}
-          />
-        )
-      })}
+      {/* Single window-spill light when active (replaces per-floor lights for performance) */}
+      {isActive && (
+        <pointLight
+          position={[(x > 0 ? -1 : 1) * (width / 2 + 1), height * 0.5, 0]}
+          color={isLight ? '#cccccc' : '#aaaaaa'}
+          intensity={isLight ? 1.5 : 3}
+          distance={12}
+          decay={2}
+          castShadow
+          shadow-mapSize-width={512}
+          shadow-mapSize-height={512}
+          shadow-bias={-0.0005}
+          shadow-camera-near={0.3}
+          shadow-camera-far={12}
+        />
+      )}
 
       {/* Floor divider ledges — shared geometry, scaled per-instance */}
       {ledgeYs.map((y, i) => (
@@ -698,7 +681,6 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     const BG_FLOOR_H = 3.5
     const BG_WIN_PER_FACE = 2
     const BG_WIN_WIDTH = 0.5
-    const BG_WIN_DEPTH = 0.12
 
     const ledgeInstances: { pos: [number, number, number]; scale: [number, number, number] }[] = []
     const windowInstances: {
@@ -931,18 +913,16 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       {/* Egyptian pyramids landmark behind the first experience building (Cairo) */}
       <group position={[0, 0, experiences[0] ? experiences[0].position * roadLength : 0]}>
         <GizaPyramids theme={theme} />
-        {/* Close-range lights on the pyramids — road-facing side */}
-        <pointLight position={[60, 25, 18]} color={isLight ? '#e0e0e0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={60} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
-        <pointLight position={[50, 20, -6]} color={isLight ? '#d0d0d0' : '#cccccc'} intensity={isLight ? 4 : 15} distance={50} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
-        <pointLight position={[40, 12, -20]} color={isLight ? '#d0d0d0' : '#cccccc'} intensity={isLight ? 3 : 12} distance={40} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+        {/* Close-range lights on the pyramids — road-facing side (no shadows for perf) */}
+        <pointLight position={[60, 25, 18]} color={isLight ? '#e0e0e0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={60} decay={1.2} />
+        <pointLight position={[50, 20, -6]} color={isLight ? '#d0d0d0' : '#cccccc'} intensity={isLight ? 4 : 15} distance={50} decay={1.2} />
       </group>
 
       {/* Berlin TV Tower landmark behind the fifth experience building (Babbel) */}
       <group position={[0, 0, experiences[4] ? experiences[4].position * roadLength : 0]}>
         <BerlinTVTower theme={theme} />
-        {/* Close-range lights on the TV tower — road-facing side */}
-        <pointLight position={[45, 35, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={50} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
-        <pointLight position={[50, 55, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 4 : 18} distance={50} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+        {/* Close-range lights on the TV tower — road-facing side (no shadows for perf) */}
+        <pointLight position={[48, 45, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 5 : 22} distance={55} decay={1.2} />
       </group>
 
       {expRenderData.map(({ exp, x, buildingHeight, numFloors, startYear, z }) => {

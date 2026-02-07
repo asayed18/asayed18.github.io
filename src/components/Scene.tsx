@@ -61,7 +61,7 @@ function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
 
   return (
     <mesh ref={meshRef} material={material}>
-      <sphereGeometry args={[500, 32, 32]} />
+      <sphereGeometry args={[500, 16, 12]} />
     </mesh>
   )
 }
@@ -167,12 +167,12 @@ function CelestialBody({ isLight }: { isLight: boolean }) {
       />
       {/* Glowing sphere */}
       <mesh ref={flareHost}>
-        <sphereGeometry args={[bodyRadius, 32, 32]} />
+        <sphereGeometry args={[bodyRadius, 16, 16]} />
         <meshBasicMaterial color={isLight ? '#ffffff' : '#e8ecf4'} toneMapped={false} />
       </mesh>
       {/* Inner glow halo */}
       <mesh>
-        <sphereGeometry args={[bodyRadius * 1.4, 32, 32]} />
+        <sphereGeometry args={[bodyRadius * 1.4, 12, 12]} />
         <meshBasicMaterial
           color={isLight ? '#fffae8' : '#c8d4e4'}
           transparent
@@ -183,7 +183,7 @@ function CelestialBody({ isLight }: { isLight: boolean }) {
       </mesh>
       {/* Outer glow halo */}
       <mesh>
-        <sphereGeometry args={[bodyRadius * 2.2, 32, 32]} />
+        <sphereGeometry args={[bodyRadius * 2.2, 12, 12]} />
         <meshBasicMaterial
           color={isLight ? '#fff0d0' : '#a0b0c8'}
           transparent
@@ -196,15 +196,15 @@ function CelestialBody({ isLight }: { isLight: boolean }) {
       {!isLight && (
         <>
           <mesh position={[-0.5, 0.6, 2]}>
-            <sphereGeometry args={[0.4, 16, 16]} />
+            <sphereGeometry args={[0.4, 8, 8]} />
             <meshBasicMaterial color="#b8bcc8" toneMapped={false} />
           </mesh>
           <mesh position={[0.8, -0.3, 1.8]}>
-            <sphereGeometry args={[0.3, 16, 16]} />
+            <sphereGeometry args={[0.3, 8, 8]} />
             <meshBasicMaterial color="#b0b4c0" toneMapped={false} />
           </mesh>
           <mesh position={[-0.2, -0.7, 2]}>
-            <sphereGeometry args={[0.25, 16, 16]} />
+            <sphereGeometry args={[0.25, 8, 8]} />
             <meshBasicMaterial color="#aeb2be" toneMapped={false} />
           </mesh>
         </>
@@ -362,8 +362,8 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
         intensity={theme === 'light' ? 2.0 : 1.4}
         color={theme === 'light' ? '#ffffff' : '#cccccc'}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-near={0.5}
         shadow-camera-far={100}
         shadow-camera-left={-25}
@@ -391,7 +391,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
       <EffectComposer multisampling={0} enableNormalPass>
         <SSAO
           blendFunction={BlendFunction.MULTIPLY}
-          samples={10}
+          samples={6}
           radius={0.5}
           intensity={50}
           luminanceInfluence={0.3}
