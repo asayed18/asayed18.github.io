@@ -7,7 +7,7 @@ import type { Theme } from '../App'
 
 const ROAD_WIDTH = 10
 const SIDE_OFFSET = 8
-const COUNT_PER_SIDE = 100
+const COUNT_PER_SIDE = 200
 const BUILDING_WIDTH = 5
 
 const MONTH_MAP: Record<string, number> = {
@@ -50,11 +50,11 @@ interface BuildingsProps {
 const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
   // Match the background building body color
-  const stoneColor = isLight ? '#909090' : '#030303'
-  const stoneEmissive = isLight ? '#606060' : '#000000'
+  const stoneColor = isLight ? '#909090' : '#3a3a3a'
+  const stoneEmissive = isLight ? '#606060' : '#282828'
   // White limestone capstone for the Great Pyramid
-  const capColor = isLight ? '#f0ece4' : '#444038'
-  const capEmissive = isLight ? '#d8d0c0' : '#2a2820'
+  const capColor = isLight ? '#f0ece4' : '#555048'
+  const capEmissive = isLight ? '#d8d0c0' : '#3a3830'
 
   // Distant silhouettes behind the first experience building — pushed further back, scaled up
   const pyramids: { x: number; z: number; height: number; radius: number; hasCap?: boolean }[] = [
@@ -143,8 +143,8 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
 /* ── Berlin Fernsehturm (TV Tower) landmark behind the fifth experience ── */
 const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const towerColor = isLight ? '#353535' : '#0a0a0a'
-  const towerEmissive = isLight ? '#131313' : '#131313'
+  const towerColor = isLight ? '#555555' : '#404040'
+  const towerEmissive = isLight ? '#303030' : '#252525'
 
   const shaftHeight = 40
   const shaftRadiusBottom = 2.2
@@ -284,11 +284,11 @@ const Logo3D = memo(function Logo3D({
         <mesh castShadow renderOrder={10}>
           <boxGeometry args={[signWidth + 0.15, signHeight + 0.15, depth]} />
           <meshStandardMaterial
-            color={isActive ? (isLight ? '#d0d0d0' : '#808080') : (isLight ? '#aaaaaa' : '#555555')}
+            color={isActive ? (isLight ? '#d0d0d0' : '#888888') : (isLight ? '#aaaaaa' : '#444444')}
             metalness={0.85}
             roughness={0.15}
-            emissive={isActive ? (isLight ? '#999999' : '#555555') : (isLight ? '#888888' : '#222222')}
-            emissiveIntensity={isActive ? 0.4 : 0.05}
+            emissive={isActive ? (isLight ? '#aaaaaa' : '#666666') : (isLight ? '#777777' : '#111111')}
+            emissiveIntensity={isActive ? 0.5 : 0.05}
           />
         </mesh>
 
@@ -298,9 +298,9 @@ const Logo3D = memo(function Logo3D({
           <meshStandardMaterial
             map={texture}
             transparent
-            color={isActive ? '#ffffff' : (isLight ? '#ffffff' : '#dddddd')}
-            emissive={isActive ? '#ffffff' : (isLight ? '#888888' : '#555555')}
-            emissiveIntensity={isActive ? 0.6 : 0.1}
+            color={isActive ? '#ffffff' : (isLight ? '#cccccc' : '#999999')}
+            emissive={isActive ? '#dddddd' : (isLight ? '#666666' : '#222222')}
+            emissiveIntensity={isActive ? 0.7 : 0.05}
             metalness={0.1}
             roughness={0.5}
             depthTest={false}
@@ -317,21 +317,21 @@ const Logo3D = memo(function Logo3D({
           <meshStandardMaterial
             map={texture}
             transparent
-            color={isActive ? '#ffffff' : (isLight ? '#ffffff' : '#dddddd')}
-            emissive={isActive ? '#ffffff' : (isLight ? '#888888' : '#555555')}
-            emissiveIntensity={isActive ? 0.6 : 0.1}
+            color={isActive ? '#ffffff' : (isLight ? '#cccccc' : '#999999')}
+            emissive={isActive ? '#dddddd' : (isLight ? '#666666' : '#222222')}
+            emissiveIntensity={isActive ? 0.7 : 0.05}
             metalness={0.1}
             roughness={0.5}
             depthTest={false}
           />
         </mesh>
 
-        {/* Point-light glow when active */}
+        {/* Point-light glow when active — illuminates the logo sign */}
         {isActive && (
           <pointLight
-            color={isLight ? '#cccccc' : '#888888'}
-            intensity={3}
-            distance={10}
+            color={isLight ? '#cccccc' : '#aaaaaa'}
+            intensity={isLight ? 2 : 4}
+            distance={12}
             decay={2}
           />
         )}
@@ -462,21 +462,22 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
     return result
   }, [numFloors, floorHeight])
 
+  // Monochromatic palette — pure grays, lit up when active
   const bodyColor = isActive
-    ? (isLight ? '#ffffff' : '#5a5a5a')
-    : (isLight ? '#f0f0f0' : '#2a2a2a')
+    ? (isLight ? '#eeeeee' : '#707070')
+    : (isLight ? '#d8d8d8' : '#333333')
   const bodyEmissive = isActive
-    ? (isLight ? '#eeeeee' : '#333333')
-    : '#000000'
+    ? (isLight ? '#cccccc' : '#555555')
+    : (isLight ? '#000000' : '#080808')
   const windowColor = isActive
-    ? (isLight ? '#888888' : '#3a3a3a')
-    : (isLight ? '#808080' : '#1a1a1a')
+    ? (isLight ? '#aaaaaa' : '#999999')
+    : (isLight ? '#909090' : '#222222')
   const windowEmissive = isActive
-    ? (isLight ? '#666666' : '#222222')
-    : (isLight ? '#666666' : '#0a0a0a')
+    ? (isLight ? '#999999' : '#888888')
+    : (isLight ? '#666666' : '#0e0e0e')
   const ledgeColor = isActive
-    ? (isLight ? '#dddddd' : '#4a4a4a')
-    : (isLight ? '#d0d0d0' : '#222222')
+    ? (isLight ? '#dddddd' : '#666666')
+    : (isLight ? '#cccccc' : '#2a2a2a')
 
   return (
     <group position={[x, 0, 0]}>
@@ -486,24 +487,94 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
         <meshStandardMaterial
           color={bodyColor}
           emissive={bodyEmissive}
-          emissiveIntensity={isActive ? 0.25 : 0}
+          emissiveIntensity={isActive ? 0.4 : 0}
         />
       </mesh>
 
-      {/* Windows on each floor — recessed planes for fake depth */}
-      {windows.map((win, i) => (
-        <mesh key={`w-${i}`} position={win.pos} rotation={win.rot} geometry={sharedWindowGeo} scale={[windowWidth, windowHeight, 1]}>
-          <meshStandardMaterial
-            color={windowColor}
-            emissive={windowEmissive}
-            emissiveIntensity={isActive ? 0.6 : 0.2}
+      {/* Lights that illuminate the building and cast onto surrounding buildings */}
+      {isActive && (
+        <>
+          {/* Main overhead light — casts shadows onto nearby buildings */}
+          <pointLight
+            position={[0, height + 3, 0]}
+            color={isLight ? '#e0e0e0' : '#bbbbbb'}
+            intensity={isLight ? 3 : 5}
+            distance={height * 3}
+            decay={2}
+            castShadow
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
+            shadow-bias={-0.0005}
+            shadow-camera-near={0.3}
+            shadow-camera-far={height * 3}
           />
+          {/* Road-side light — spills onto the road and opposite buildings */}
+          <pointLight
+            position={[x > 0 ? -width : width, height * 0.5, 0]}
+            color={isLight ? '#d0d0d0' : '#999999'}
+            intensity={isLight ? 2 : 3.5}
+            distance={height * 2.5}
+            decay={2}
+            castShadow
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
+            shadow-bias={-0.0005}
+          />
+          {/* Low ground-level fill — lights up the base and road surface */}
+          <pointLight
+            position={[0, 1, 0]}
+            color={isLight ? '#cccccc' : '#888888'}
+            intensity={isLight ? 1 : 2}
+            distance={height * 2}
+            decay={2}
+          />
+        </>
+      )}
+
+      {/* Windows on each floor */}
+      {windows.map((win, i) => (
+        <mesh key={`w-${i}`} position={win.pos} rotation={win.rot} geometry={sharedWindowGeo} scale={[windowWidth, windowHeight, 1]} receiveShadow>
+          {isActive ? (
+            /* Lit windows — unlit material so they glow uniformly like real interior light */
+            <meshBasicMaterial
+              color={isLight ? '##fff' : '#fafafa'}
+              toneMapped={false}
+            />
+          ) : (
+            <meshStandardMaterial
+              color={windowColor}
+              emissive={windowEmissive}
+              emissiveIntensity={0.15}
+            />
+          )}
         </mesh>
       ))}
 
+      {/* Per-floor window lights when active — light spills out and casts sharp shadows */}
+      {isActive && Array.from({ length: numFloors }, (_, floor) => {
+        const floorY = floor * floorHeight + floorHeight * 0.55
+        const roadDir = x > 0 ? -1 : 1
+        return (
+          <pointLight
+            key={`wl-${floor}`}
+            position={[roadDir * (width / 2 + 0.5), floorY, 0]}
+            color={isLight ? '#cccccc' : '#aaaaaa'}
+            intensity={isLight ? 0.5 : 1.0}
+            distance={8}
+            decay={2}
+            castShadow
+            shadow-mapSize-width={512}
+            shadow-mapSize-height={512}
+            shadow-bias={-0.0005}
+            shadow-camera-near={0.2}
+            shadow-camera-far={8}
+          />
+        )
+      })}
+
       {/* Floor divider ledges — shared geometry, scaled per-instance */}
       {ledgeYs.map((y, i) => (
-        <mesh key={`l-${i}`} position={[0, y, 0]} geometry={sharedLedgeGeo} scale={[width + 0.08, 0.06, depth + 0.08]}>
+        <mesh key={`l-${i}`} position={[0, y, 0]} geometry={sharedLedgeGeo} scale={[width + 0.08, 0.06, depth + 0.08]} castShadow receiveShadow>
           <meshStandardMaterial color={ledgeColor} />
         </mesh>
       ))}
@@ -555,7 +626,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     // Build exclusion zones around experience buildings so background buildings don't overlap them
     const EXP_W = 5
     const EXP_D = 5
-    const MARGIN = 0.03 // minimum gap between any two buildings
+    const MARGIN = 0.01 // minimum gap between any two buildings
     const expZones = experiences.map((exp, index) => {
       const side = index % 2 === 0 ? 1 : -1
       return {
@@ -739,12 +810,12 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
   )
 
   useEffect(() => {
-    material.color.set(isLight ? '#c0c0c0' : '#2a2a2a')
+    material.color.set(isLight ? '#c8c8c8' : '#383838')
     material.needsUpdate = true
-    ledgeMaterial.color.set(isLight ? '#d0d0d0' : '#222222')
+    ledgeMaterial.color.set(isLight ? '#d8d8d8' : '#303030')
     ledgeMaterial.needsUpdate = true
-    windowMaterial.color.set(isLight ? '#808080' : '#1a1a1a')
-    windowMaterial.emissive.set(isLight ? '#666666' : '#0a0a0a')
+    windowMaterial.color.set(isLight ? '#888888' : '#252525')
+    windowMaterial.emissive.set(isLight ? '#666666' : '#121212')
     windowMaterial.needsUpdate = true
   }, [isLight, material, ledgeMaterial, windowMaterial])
 
@@ -903,11 +974,18 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       {/* Egyptian pyramids landmark behind the first experience building (Cairo) */}
       <group position={[0, 0, experiences[0] ? experiences[0].position * roadLength : 0]}>
         <GizaPyramids theme={theme} />
+        {/* Close-range lights on the pyramids — road-facing side */}
+        <pointLight position={[60, 25, 18]} color={isLight ? '#e0e0e0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={60} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+        <pointLight position={[50, 20, -6]} color={isLight ? '#d0d0d0' : '#cccccc'} intensity={isLight ? 4 : 15} distance={50} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+        <pointLight position={[40, 12, -20]} color={isLight ? '#d0d0d0' : '#cccccc'} intensity={isLight ? 3 : 12} distance={40} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
       </group>
 
       {/* Berlin TV Tower landmark behind the fifth experience building (Babbel) */}
       <group position={[0, 0, experiences[4] ? experiences[4].position * roadLength : 0]}>
         <BerlinTVTower theme={theme} />
+        {/* Close-range lights on the TV tower — road-facing side */}
+        <pointLight position={[45, 35, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={50} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
+        <pointLight position={[50, 55, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 4 : 18} distance={50} decay={1.2} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} />
       </group>
 
       {expRenderData.map(({ exp, x, buildingHeight, numFloors, startYear, z }) => {

@@ -46,20 +46,10 @@ function App() {
   const experienceHeldRef = useRef(false)
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevExperienceRef = useRef<string | null>(null)
-  const prevScrollProgress = useRef(scrollProgress)
 
   useEffect(() => {
-    // Determine scroll direction (forward = toward portfolio, backward = toward hero)
-    const scrollingForward = scrollProgress >= prevScrollProgress.current
-    prevScrollProgress.current = scrollProgress
-
-    // Entering a NEW experience zone while scrolling FORWARD → freeze briefly.
-    // Scrolling backward (retreating from portfolio / revisiting) should never freeze.
-    if (
-      activeExperienceId &&
-      activeExperienceId !== prevExperienceRef.current &&
-      scrollingForward
-    ) {
+    // Entering a NEW experience zone → freeze scroll briefly
+    if (activeExperienceId && activeExperienceId !== prevExperienceRef.current) {
       experienceHeldRef.current = true
       if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
       holdTimerRef.current = setTimeout(() => {
@@ -67,8 +57,8 @@ function App() {
       }, 1200) // 1.2 s pause — enough to notice the panel
     }
 
-    // Left any zone or scrolling backward → cancel hold immediately
-    if (!activeExperienceId || !scrollingForward) {
+    // Left any zone → cancel hold immediately
+    if (!activeExperienceId) {
       experienceHeldRef.current = false
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current)
@@ -80,7 +70,7 @@ function App() {
     return () => {
       if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     }
-  }, [activeExperienceId, scrollProgress])
+  }, [activeExperienceId]) // only re-run when zone changes — timer survives between renders
 
   // Register non-passive wheel listener so preventDefault works
   useEffect(() => {
@@ -91,7 +81,16 @@ function App() {
       // Don't intercept when portfolio overlay is active — let it scroll naturally
       if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
 
-      // During the brief hold after entering an experience zone, block scrolling
+      // Scrolling backward → always allow; clear any active hold so user isn't stuck
+      if (e.deltaY < 0 && experienceHeldRef.current) {
+        experienceHeldRef.current = false
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current)
+          holdTimerRef.current = null
+        }
+      }
+
+      // During the brief hold after entering an experience zone, block forward scrolling
       if (experienceHeldRef.current) {
         e.preventDefault()
         return
@@ -135,7 +134,7 @@ function App() {
       <div className="canvas-wrapper">
         <Canvas
           gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
-          shadows="soft"
+          shadows
           camera={{ position: [0, 3, 0], fov: 60 }}
           dpr={[1, 1.5]}
           performance={{ min: 0.5 }}

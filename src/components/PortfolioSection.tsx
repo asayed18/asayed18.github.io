@@ -97,9 +97,6 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
       style={{
         opacity,
         pointerEvents: progress > 0.3 ? 'auto' : 'none',
-        // Lock native scroll during transition to prevent trackpad inertia
-        // from conflicting with programmatic scroll forwarding.
-        overflowY: progress >= 1 ? 'auto' : 'hidden',
       }}
     >
       <div

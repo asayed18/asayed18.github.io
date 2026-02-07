@@ -1,12 +1,160 @@
-import { useRef, useCallback, useMemo } from 'react'
+import { useRef, useCallback, useMemo, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { EffectComposer, SSAO, Noise, Vignette, Bloom } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import * as THREE from 'three'
+import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js'
 import type { Experience } from '../data/experiences'
 import type { Theme } from '../App'
 import { Road } from './Road'
 import { Buildings } from './Buildings'
+
+/* ── Procedural lens-flare textures ── */
+function createFlareTexture(size: number, falloff: number, color: string): THREE.Texture {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const half = size / 2
+  const gradient = ctx.createRadialGradient(half, half, 0, half, half, half)
+  gradient.addColorStop(0, color)
+  gradient.addColorStop(falloff, color.replace(')', ', 0.3)').replace('rgb', 'rgba'))
+  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.needsUpdate = true
+  return tex
+}
+
+function createRingTexture(size: number, color: string): THREE.Texture {
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const half = size / 2
+  const gradient = ctx.createRadialGradient(half, half, half * 0.6, half, half, half * 0.85)
+  gradient.addColorStop(0, 'rgba(0,0,0,0)')
+  gradient.addColorStop(0.4, color.replace(')', ', 0.15)').replace('rgb', 'rgba'))
+  gradient.addColorStop(0.6, color.replace(')', ', 0.08)').replace('rgb', 'rgba'))
+  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.needsUpdate = true
+  return tex
+}
+
+/* ── Sun / Moon — visible celestial body with lens flare, follows camera ── */
+const SUN_OFFSET = new THREE.Vector3(15, 70, 10)
+const MOON_OFFSET = new THREE.Vector3(-12, 65, 8)
+
+function CelestialBody({ isLight }: { isLight: boolean }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const flareHost = useRef<THREE.Mesh>(null)
+
+  useEffect(() => {
+    if (!flareHost.current) return
+
+    const mainColor = isLight ? 'rgb(255,240,220)' : 'rgb(180,200,220)'
+    const hexColor = isLight ? 'rgb(255,220,180)' : 'rgb(150,170,200)'
+
+    const texMain = createFlareTexture(256, 0.3, mainColor)
+    const texSoft = createFlareTexture(256, 0.6, hexColor)
+    const texRing = createRingTexture(256, mainColor)
+
+    const lensflare = new Lensflare()
+    if (isLight) {
+      lensflare.addElement(new LensflareElement(texMain, 500, 0, new THREE.Color('#ffffff')))
+      lensflare.addElement(new LensflareElement(texSoft, 280, 0.1, new THREE.Color('#fff8ee')))
+      lensflare.addElement(new LensflareElement(texRing, 320, 0.25, new THREE.Color('#ffe8cc')))
+      lensflare.addElement(new LensflareElement(texSoft, 200, 0.4, new THREE.Color('#ffd8a8')))
+      lensflare.addElement(new LensflareElement(texRing, 240, 0.6, new THREE.Color('#ffeedd')))
+      lensflare.addElement(new LensflareElement(texSoft, 150, 0.8, new THREE.Color('#ffe0bb')))
+    } else {
+      lensflare.addElement(new LensflareElement(texMain, 320, 0, new THREE.Color('#e0e8f4')))
+      lensflare.addElement(new LensflareElement(texSoft, 180, 0.15, new THREE.Color('#c8d8e8')))
+      lensflare.addElement(new LensflareElement(texRing, 220, 0.35, new THREE.Color('#a0b8d0')))
+      lensflare.addElement(new LensflareElement(texSoft, 120, 0.55, new THREE.Color('#8898b0')))
+      lensflare.addElement(new LensflareElement(texRing, 150, 0.8, new THREE.Color('#708098')))
+    }
+
+    flareHost.current.add(lensflare)
+
+    return () => {
+      flareHost.current?.remove(lensflare)
+      lensflare.dispose()
+      texMain.dispose()
+      texSoft.dispose()
+      texRing.dispose()
+    }
+  }, [isLight])
+
+  useFrame((state) => {
+    if (!groupRef.current) return
+    const cam = state.camera.position
+    const offset = isLight ? SUN_OFFSET : MOON_OFFSET
+    groupRef.current.position.set(cam.x + offset.x, offset.y, cam.z + offset.z)
+  })
+
+  const bodyRadius = isLight ? 3 : 2.2
+
+  return (
+    <group ref={groupRef}>
+      {/* Point light from celestial body */}
+      <pointLight
+        color={isLight ? '#ffffff' : '#cccccc'}
+        intensity={isLight ? 3.5 : 1.8}
+        distance={250}
+        decay={1}
+      />
+      {/* Glowing sphere */}
+      <mesh ref={flareHost}>
+        <sphereGeometry args={[bodyRadius, 32, 32]} />
+        <meshBasicMaterial color={isLight ? '#ffffff' : '#e8ecf4'} toneMapped={false} />
+      </mesh>
+      {/* Inner glow halo */}
+      <mesh>
+        <sphereGeometry args={[bodyRadius * 1.4, 32, 32]} />
+        <meshBasicMaterial
+          color={isLight ? '#fffae8' : '#c8d4e4'}
+          transparent
+          opacity={isLight ? 0.3 : 0.15}
+          toneMapped={false}
+          side={THREE.BackSide}
+        />
+      </mesh>
+      {/* Outer glow halo */}
+      <mesh>
+        <sphereGeometry args={[bodyRadius * 2.2, 32, 32]} />
+        <meshBasicMaterial
+          color={isLight ? '#fff0d0' : '#a0b0c8'}
+          transparent
+          opacity={isLight ? 0.12 : 0.06}
+          toneMapped={false}
+          side={THREE.BackSide}
+        />
+      </mesh>
+      {/* Moon craters */}
+      {!isLight && (
+        <>
+          <mesh position={[-0.5, 0.6, 2]}>
+            <sphereGeometry args={[0.4, 16, 16]} />
+            <meshBasicMaterial color="#b8bcc8" toneMapped={false} />
+          </mesh>
+          <mesh position={[0.8, -0.3, 1.8]}>
+            <sphereGeometry args={[0.3, 16, 16]} />
+            <meshBasicMaterial color="#b0b4c0" toneMapped={false} />
+          </mesh>
+          <mesh position={[-0.2, -0.7, 2]}>
+            <sphereGeometry args={[0.25, 16, 16]} />
+            <meshBasicMaterial color="#aeb2be" toneMapped={false} />
+          </mesh>
+        </>
+      )}
+    </group>
+  )
+}
 
 const ROAD_LENGTH = 200
 const CAMERA_HEIGHT = 3
@@ -132,8 +280,6 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
       const cameraOffsetY = lookAtY + requiredDist * 0.15
       _targetCameraPos.current.set(cameraOffsetX, cameraOffsetY, buildingZ + cameraOffsetZ)
       // Lerp from the camera's actual current position — NOT the road position.
-      // Resetting to (0, CAMERA_HEIGHT, z) every frame would discard accumulated
-      // lerp progress and fight with the still-moving smoothProgress, causing shaking.
       _currentCameraPos.current.copy(camera.position)
       _currentCameraPos.current.lerp(_targetCameraPos.current, Math.min(delta * 2, 1))
       camera.position.copy(_currentCameraPos.current)
@@ -150,31 +296,33 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   return (
     <>
       <color attach="background" args={[colors.background]} />
-      <fogExp2 attach="fog" args={[colors.fog, 0.021]} />
-      <ambientLight intensity={theme === 'light' ? 0.6 : 0.35} />
+      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.021 : 0.022]} />
+      {/* Ambient fill */}
+      <ambientLight intensity={theme === 'light' ? 0.3 : 0.25} />
+      {/* Primary directional light aligned with sun/moon direction */}
       <directionalLight
-        position={[15, 30, 10]}
-        intensity={theme === 'light' ? 1.8 : 1.2}
+        position={theme === 'light' ? [15, 70, 10] : [-12, 65, 8]}
+        intensity={theme === 'light' ? 2.0 : 1.4}
+        color={theme === 'light' ? '#ffffff' : '#cccccc'}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-near={0.5}
-        shadow-camera-far={150}
-        shadow-camera-left={-40}
-        shadow-camera-right={40}
-        shadow-camera-top={40}
-        shadow-camera-bottom={-40}
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.02}
+        shadow-camera-far={100}
+        shadow-camera-left={-25}
+        shadow-camera-right={25}
+        shadow-camera-top={25}
+        shadow-camera-bottom={-25}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.01}
       />
-      <directionalLight position={[-5, 10, -5]} intensity={theme === 'light' ? 0.3 : 0.15} />
-      {/* Weak fill light that follows the camera */}
-      <pointLight
-        position={camera.position}
-        intensity={theme === 'light' ? 0.4 : 0.25}
-        distance={40}
-        decay={2}
+      {/* Fill from opposite side */}
+      <directionalLight
+        position={theme === 'light' ? [-10, 15, -5] : [10, 15, -5]}
+        intensity={theme === 'light' ? 0.15 : 0.2}
       />
+      {/* Sun / Moon with lens flare */}
+      <CelestialBody isLight={theme === 'light'} />
       <Road length={ROAD_LENGTH} theme={theme} />
       <Buildings
         roadLength={ROAD_LENGTH}
@@ -196,19 +344,19 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
           worldProximityFalloff={0.5}
         />
         <Bloom
-          intensity={0.4}
-          luminanceThreshold={0.6}
+          intensity={theme === 'light' ? 0.4 : 0.7}
+          luminanceThreshold={theme === 'light' ? 0.6 : 0.35}
           luminanceSmoothing={0.3}
           mipmapBlur
         />
         <Vignette
-          offset={0.35}
-          darkness={0.55}
+          offset={theme === 'light' ? 0.35 : 0.25}
+          darkness={theme === 'light' ? 0.55 : 0.7}
           blendFunction={BlendFunction.NORMAL}
         />
         <Noise
           blendFunction={BlendFunction.SOFT_LIGHT}
-          opacity={0.25}
+          opacity={theme === 'light' ? 0.25 : 0.28}
         />
       </EffectComposer>
     </>
