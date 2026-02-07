@@ -166,7 +166,7 @@ const Logo3D = memo(function Logo3D({
   const texture = useTexture(logoUrl)
   const groupRef = useRef<THREE.Group>(null)
 
-  // Convert texture to grayscale for monochromatic look
+  // Convert texture to grayscale + optimize for GPU
   useMemo(() => {
     const img = texture.image
     if (!img) return
@@ -186,6 +186,10 @@ const Logo3D = memo(function Logo3D({
     }
     ctx.putImageData(imageData, 0, 0)
     texture.image = canvas
+    // Optimize texture for GPU: no mipmaps needed for small fixed-size signs
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.generateMipmaps = false
     texture.needsUpdate = true
   }, [texture])
 
