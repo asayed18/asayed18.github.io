@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { portfolioProjects } from '../data/portfolio'
 import './PortfolioSection.css'
 
@@ -84,6 +84,49 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
     }
   }, [ctaVisible])
 
+  // Forward touch events on the portfolio overlay to the scroll container
+  // so mobile users can keep scrolling through the title phase
+  const touchStartY = useRef(0)
+
+  useEffect(() => {
+    const el = overlayRef.current
+    if (!el) return
+
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0].clientY
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      // Let portfolio-content (cards, calendly) scroll natively
+      if ((e.target as HTMLElement).closest?.('.portfolio-content')) return
+
+      const deltaY = touchStartY.current - e.touches[0].clientY
+      touchStartY.current = e.touches[0].clientY
+      const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+      if (scrollContainer) {
+        scrollContainer.scrollBy({ top: deltaY, behavior: 'auto' })
+      }
+      e.preventDefault()
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+    }
+  }, [])
+
+  // Forward wheel events too (desktop, for consistency)
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if ((e.target as HTMLElement).closest?.('.portfolio-content')) return
+    const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+    if (scrollContainer) {
+      scrollContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
+    }
+  }, [])
+
   if (progress <= 0) return null
 
   const ease = progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2
@@ -93,6 +136,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
     <div
       ref={overlayRef}
       className="portfolio-overlay"
+      onWheel={handleWheel}
       style={{
         opacity,
         pointerEvents: progress > 0.3 ? 'auto' : 'none',

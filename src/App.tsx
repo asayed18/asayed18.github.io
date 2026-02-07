@@ -82,7 +82,9 @@ function App() {
     // Desktop: forward wheel events
     const handleWheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement).closest?.('.experience-panel')) return
-      if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
+      // Only let portfolio-content (cards/calendly) scroll natively, not the title phase
+      const portfolioContent = (e.target as HTMLElement).closest?.('.portfolio-content')
+      if (portfolioContent) return
 
       if (e.deltaY < 0 && experienceHeldRef.current) {
         experienceHeldRef.current = false
@@ -108,7 +110,10 @@ function App() {
 
     const handleTouchMove = (e: TouchEvent) => {
       if ((e.target as HTMLElement).closest?.('.experience-panel')) return
-      if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
+      // Allow portfolio-content (cards/calendly) to scroll natively,
+      // but forward touch during the title phase so user can keep scrolling
+      const portfolioContent = (e.target as HTMLElement).closest?.('.portfolio-content')
+      if (portfolioContent) return
 
       const deltaY = touchStartY.current - e.touches[0].clientY
       touchStartY.current = e.touches[0].clientY
