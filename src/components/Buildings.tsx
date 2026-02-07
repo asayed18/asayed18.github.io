@@ -7,7 +7,7 @@ import type { Theme } from '../App'
 
 const ROAD_WIDTH = 10
 const SIDE_OFFSET = 8
-const COUNT_PER_SIDE = 120
+const COUNT_PER_SIDE = 500
 const BUILDING_WIDTH = 5
 
 const MONTH_MAP: Record<string, number> = {
@@ -56,15 +56,15 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   // Distant silhouettes behind the first experience building — pushed further back, scaled up
   const pyramids: { x: number; z: number; height: number; radius: number }[] = [
     // Great Pyramid of Khufu
-    { x: 80, z: 18, height: 35, radius: 34 },
+    { x: 95, z: 18, height: 35, radius: 34 },
     // Pyramid of Khafre
-    { x: 65, z: -6, height: 31, radius: 30 },
+    { x: 80, z: -6, height: 31, radius: 30 },
     // Pyramid of Menkaure
-    { x: 50, z: -28, height: 18, radius: 18 },
+    { x: 65, z: -28, height: 18, radius: 18 },
     // Queen's pyramids (small satellites)
-    { x: 44, z: -40, height: 7.5, radius: 7.5 },
-    { x: 40, z: -34, height: 7, radius: 7 },
-    { x: 36, z: -28, height: 6, radius: 6 },
+    { x: 58, z: -40, height: 7.5, radius: 7.5 },
+    { x: 54, z: -34, height: 7, radius: 7 },
+    { x: 50, z: -28, height: 6, radius: 6 },
   ]
 
   return (
@@ -627,15 +627,15 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     // Each row has its own X band so they don't compete for the same space
     const rows = [
       // Front row: close to road, tallest
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET, xRange: 6, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 4, hRange: 12, seedOffset: 0, zJitter: 3 },
+      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET, xRange: 5, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 4, hRange: 12, seedOffset: 0, zJitter: 1.5 },
       // Middle row: behind front
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 8, xRange: 5, wMin: 2, wRange: 4, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 5000, zJitter: 4 },
+      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 6, xRange: 4, wMin: 2, wRange: 4, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 5000, zJitter: 2 },
       // Back row: shorter fill
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 15, xRange: 5, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 5 },
+      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 11, xRange: 4, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 2.5 },
       // Deep row: more fill far back
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 22, xRange: 6, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 5 },
+      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 16, xRange: 5, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 3 },
       // Skyline row: distant tall silhouettes for city skyline effect
-      { count: Math.floor(COUNT_PER_SIDE * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 30, xRange: 10, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 6 },
+      { count: Math.floor(COUNT_PER_SIDE * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 22, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
     ]
 
     // Only cap heights near experience buildings that have landmarks behind them
