@@ -69,4 +69,5 @@ export const experiences: Experience[] = [
 ]
 
 export const SECTION_HEIGHT_VH = 120
-export const TOTAL_SCROLL_HEIGHT_VH = experiences.length * SECTION_HEIGHT_VH
+// Extra scroll room at the end for the portfolio section
+export const TOTAL_SCROLL_HEIGHT_VH = experiences.length * SECTION_HEIGHT_VH + 200

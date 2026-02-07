@@ -48,6 +48,8 @@ function App() {
     if (!el) return
     const handleWheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement).closest?.('.experience-panel')) return
+      // Don't intercept when portfolio overlay is active — let it scroll naturally
+      if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
       const scrollSpeed = activeExperienceId ? 0.3 : 1
       scrollRef.current?.scrollBy({ top: e.deltaY * scrollSpeed, behavior: 'auto' })
       e.preventDefault()
@@ -107,7 +109,10 @@ function App() {
       <div
         ref={uiOverlayRef}
         className="ui-overlay"
-        style={{ opacity: headerOpacity, pointerEvents: headerOpacity > 0.1 ? 'auto' : 'none' }}
+        style={{
+          opacity: headerOpacity,
+          pointerEvents: headerOpacity > 0.1 ? 'auto' : 'none',
+        }}
       >
         <Header
           theme={theme}

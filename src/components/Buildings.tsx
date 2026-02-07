@@ -201,18 +201,19 @@ const Logo3D = memo(function Logo3D({
 
   const worldPos = useRef(new THREE.Vector3())
 
-  // Face camera + gentle floating animation
+  // Face camera + gentle floating animation — only when within render distance
   useFrame((state) => {
     if (!groupRef.current) return
-    const t = state.clock.elapsedTime
 
-    // Gentle floating around the base position
+    // Skip expensive updates for distant logos
+    groupRef.current.getWorldPosition(worldPos.current)
+    const dz = state.camera.position.z - worldPos.current.z
+    if (Math.abs(dz) > 50) return
+
+    const t = state.clock.elapsedTime
     groupRef.current.position.y = signBaseY + Math.sin(t * 0.8) * 0.08
 
-    // Rotate to face the camera
-    groupRef.current.getWorldPosition(worldPos.current)
     const dx = state.camera.position.x - worldPos.current.x
-    const dz = state.camera.position.z - worldPos.current.z
     groupRef.current.rotation.y = Math.atan2(dx, dz)
   })
 
@@ -439,7 +440,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
         />
       </mesh>
 
-      {/* Windows on each floor — shared geometry, scaled per-instance */}
+      {/* Windows on each floor — recessed planes for fake depth */}
       {windows.map((win, i) => (
         <mesh key={`w-${i}`} position={win.pos} rotation={win.rot} geometry={sharedWindowGeo} scale={[windowWidth, windowHeight, 1]}>
           <meshStandardMaterial
@@ -619,6 +620,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     const BG_FLOOR_H = 3.5
     const BG_WIN_PER_FACE = 2
     const BG_WIN_WIDTH = 0.5
+    const BG_WIN_DEPTH = 0.12
 
     const ledgeInstances: { pos: [number, number, number]; scale: [number, number, number] }[] = []
     const windowInstances: {
@@ -642,40 +644,16 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         })
       }
 
-      // Windows on every floor, on all four faces
+      // Windows on every floor — only the road-facing face, recessed for depth
       for (let f = 0; f < numFloors; f++) {
         const floorY = f * floorH + floorH * 0.55
-        const wSpacing = w / (BG_WIN_PER_FACE + 1)
-
-        for (let wn = 0; wn < BG_WIN_PER_FACE; wn++) {
-          const wx = -w / 2 + wSpacing * (wn + 1)
-          // Front (+Z)
-          windowInstances.push({
-            pos: [cx + wx, floorY, cz + d / 2 + 0.01],
-            rot: [0, 0, 0],
-            scale: [BG_WIN_WIDTH, winH, 1],
-          })
-          // Back (-Z)
-          windowInstances.push({
-            pos: [cx + wx, floorY, cz - d / 2 - 0.01],
-            rot: [0, Math.PI, 0],
-            scale: [BG_WIN_WIDTH, winH, 1],
-          })
-        }
-
         const sSpacing = d / (BG_WIN_PER_FACE + 1)
+        const innerSide = cx > 0 ? -1 : 1 // face toward road
         for (let wn = 0; wn < BG_WIN_PER_FACE; wn++) {
           const wz = -d / 2 + sSpacing * (wn + 1)
-          // Right (+X)
           windowInstances.push({
-            pos: [cx + w / 2 + 0.01, floorY, cz + wz],
-            rot: [0, Math.PI / 2, 0],
-            scale: [BG_WIN_WIDTH, winH, 1],
-          })
-          // Left (-X)
-          windowInstances.push({
-            pos: [cx - w / 2 - 0.01, floorY, cz + wz],
-            rot: [0, -Math.PI / 2, 0],
+            pos: [cx + innerSide * (w / 2 + 0.01), floorY, cz + wz],
+            rot: [0, innerSide > 0 ? Math.PI / 2 : -Math.PI / 2, 0],
             scale: [BG_WIN_WIDTH, winH, 1],
           })
         }
@@ -698,7 +676,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     []
   )
 
-  // Geometry & material for background building windows
+  // Geometry & material for background building windows (recessed planes)
   const windowGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
   const windowMaterial = useMemo(
     () =>
@@ -774,7 +752,17 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     mesh.instanceMatrix.needsUpdate = true
   }, [windowInstances, dummy])
 
-  const experienceZ = (exp: Experience) => exp.position * roadLength
+  // Pre-compute all experience building data once (avoids parsing periods every render)
+  const expRenderData = useMemo(() => experiences.map((exp, index) => {
+    const side = index % 2 === 0 ? 1 : -1
+    const x = side * (ROAD_WIDTH / 2 + SIDE_OFFSET)
+    const months = parsePeriodMonths(exp.period)
+    const buildingHeight = monthsToHeight(months)
+    const numFloors = Math.max(Math.ceil(months / 12), 1)
+    const startYear = parseInt(exp.period.split('–')[0].trim().split(' ')[1])
+    const z = exp.position * roadLength
+    return { exp, index, side, x, buildingHeight, numFloors, startYear, z }
+  }), [experiences, roadLength])
 
   // Continuous timeline ticks — batched into a single InstancedMesh
   const tickSpacing = 1.5
@@ -844,12 +832,14 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         args={[geometry, material, COUNT_PER_SIDE * 12]}
         castShadow
         receiveShadow
+        frustumCulled={false}
       />
       {/* Background building floor ledges */}
       {ledgeInstances.length > 0 && (
         <instancedMesh
           ref={ledgeRef}
           args={[ledgeGeometry, ledgeMaterial, ledgeInstances.length]}
+          frustumCulled={false}
         />
       )}
       {/* Background building windows */}
@@ -857,6 +847,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         <instancedMesh
           ref={windowRef}
           args={[windowGeometry, windowMaterial, windowInstances.length]}
+          frustumCulled={false}
         />
       )}
       {/* Egyptian pyramids landmark behind the first experience building (Cairo) */}
@@ -869,17 +860,11 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         <BerlinTVTower theme={theme} />
       </group>
 
-      {experiences.map((exp, index) => {
+      {expRenderData.map(({ exp, x, buildingHeight, numFloors, startYear, z }) => {
         const isActive = exp.id === activeExperienceId
-        const side = index % 2 === 0 ? 1 : -1
-        const x = side * (ROAD_WIDTH / 2 + SIDE_OFFSET)
-        const months = parsePeriodMonths(exp.period)
-        const buildingHeight = monthsToHeight(months)
-        const numFloors = Math.max(Math.ceil(months / 12), 1)
-        const startYear = parseInt(exp.period.split('–')[0].trim().split(' ')[1])
 
         return (
-          <group key={exp.id} position={[0, 0, experienceZ(exp)]}>
+          <group key={exp.id} position={[0, 0, z]}>
             <ExperienceBuilding
               x={x}
               width={5}
@@ -899,7 +884,6 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
                 />
               </group>
             )}
-            {/* Date marking on the road surface */}
             <RoadDateMarking
               period={exp.period}
               isActive={isActive}
