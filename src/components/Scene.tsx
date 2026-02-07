@@ -428,7 +428,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
         />
         <Noise
           blendFunction={BlendFunction.SOFT_LIGHT}
-          opacity={theme === 'light' ? 0.15 : 0.18}
+          opacity={perf.tier === 'low' ? 0.05 : (theme === 'light' ? 0.15 : 0.18)}
         />
       </EffectComposer>
     </>
