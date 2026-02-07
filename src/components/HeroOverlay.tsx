@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import './HeroOverlay.css'
 
 interface HeroOverlayProps {
@@ -10,12 +10,41 @@ interface HeroOverlayProps {
 
 export function HeroOverlay({ scrollProgress, theme, onToggleTheme, sceneReady }: HeroOverlayProps) {
   const heroRef = useRef<HTMLDivElement>(null)
+  const touchStartY = useRef(0)
 
-  // Forward wheel events to the scroll container beneath
+  // Forward wheel events to the scroll container beneath (desktop)
   const handleWheel = useCallback((e: React.WheelEvent) => {
     const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
     if (scrollContainer) {
       scrollContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
+    }
+  }, [])
+
+  // Forward touch events to the scroll container (mobile)
+  useEffect(() => {
+    const el = heroRef.current
+    if (!el) return
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0].clientY
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const deltaY = touchStartY.current - e.touches[0].clientY
+      touchStartY.current = e.touches[0].clientY
+      const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+      if (scrollContainer) {
+        scrollContainer.scrollBy({ top: deltaY, behavior: 'auto' })
+      }
+      e.preventDefault()
+    }
+
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    el.addEventListener('touchmove', handleTouchMove, { passive: false })
+
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart)
+      el.removeEventListener('touchmove', handleTouchMove)
     }
   }, [])
 
@@ -93,7 +122,7 @@ export function HeroOverlay({ scrollProgress, theme, onToggleTheme, sceneReady }
 
         <div className="hero-text">
           <h1 className="hero-name">Ahmed Sayed</h1>
-          <p className="hero-title">Senior Software Engineer @ Babbel GmbH</p>
+          <p className="hero-title">Senior Software Engineer @ Forgent AI</p>
         </div>
 
         <nav

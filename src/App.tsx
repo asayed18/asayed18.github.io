@@ -72,16 +72,18 @@ function App() {
     }
   }, [activeExperienceId]) // only re-run when zone changes — timer survives between renders
 
-  // Register non-passive wheel listener so preventDefault works
+  // Register non-passive wheel + touch listeners so scrolling works on desktop and mobile
+  const touchStartY = useRef(0)
+
   useEffect(() => {
     const el = uiOverlayRef.current
     if (!el) return
+
+    // Desktop: forward wheel events
     const handleWheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement).closest?.('.experience-panel')) return
-      // Don't intercept when portfolio overlay is active — let it scroll naturally
       if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
 
-      // Scrolling backward → always allow; clear any active hold so user isn't stuck
       if (e.deltaY < 0 && experienceHeldRef.current) {
         experienceHeldRef.current = false
         if (holdTimerRef.current) {
@@ -90,18 +92,53 @@ function App() {
         }
       }
 
-      // During the brief hold after entering an experience zone, block forward scrolling
       if (experienceHeldRef.current) {
         e.preventDefault()
         return
       }
 
-      // Normal speed — no artificial slowdown
       scrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' })
       e.preventDefault()
     }
+
+    // Mobile: forward touch events
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0].clientY
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if ((e.target as HTMLElement).closest?.('.experience-panel')) return
+      if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
+
+      const deltaY = touchStartY.current - e.touches[0].clientY
+      touchStartY.current = e.touches[0].clientY
+
+      if (deltaY < 0 && experienceHeldRef.current) {
+        experienceHeldRef.current = false
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current)
+          holdTimerRef.current = null
+        }
+      }
+
+      if (experienceHeldRef.current) {
+        e.preventDefault()
+        return
+      }
+
+      scrollRef.current?.scrollBy({ top: deltaY, behavior: 'auto' })
+      e.preventDefault()
+    }
+
     el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    el.addEventListener('touchmove', handleTouchMove, { passive: false })
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel)
+      el.removeEventListener('touchstart', handleTouchStart)
+      el.removeEventListener('touchmove', handleTouchMove)
+    }
   }, []) // all dynamic state accessed via refs
 
   const [aboutOpen, setAboutOpen] = useState(false)
