@@ -88,7 +88,6 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
 
   const ease = progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2
   const opacity = ease
-  const blur = (1 - ease) * 8
 
   return (
     <div
@@ -99,13 +98,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
         pointerEvents: progress > 0.3 ? 'auto' : 'none',
       }}
     >
-      <div
-        className="portfolio-backdrop"
-        style={{
-          backdropFilter: `blur(${blur + 12}px)`,
-          WebkitBackdropFilter: `blur(${blur + 12}px)`,
-        }}
-      />
+      <div className="portfolio-backdrop" />
 
       {/* Large centered title – fades in, holds, then fades out */}
       {ease < 0.5 && (
