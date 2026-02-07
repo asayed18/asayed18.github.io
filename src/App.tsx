@@ -72,77 +72,60 @@ function App() {
     }
   }, [activeExperienceId]) // only re-run when zone changes — timer survives between renders
 
-  // Register non-passive wheel + touch listeners so scrolling works on desktop and mobile
+  // Global scroll forwarding — single handler for both wheel (desktop) and touch (mobile)
   const touchStartY = useRef(0)
 
   useEffect(() => {
-    const el = uiOverlayRef.current
-    if (!el) return
+    // Elements that handle their own scrolling
+    const isScrollableTarget = (el: HTMLElement) =>
+      !!el.closest?.('.experience-panel') || !!el.closest?.('.portfolio-content')
 
-    // Desktop: forward wheel events
+    // Desktop: forward wheel
     const handleWheel = (e: WheelEvent) => {
-      if ((e.target as HTMLElement).closest?.('.experience-panel')) return
-      // Only let portfolio-content (cards/calendly) scroll natively, not the title phase
-      const portfolioContent = (e.target as HTMLElement).closest?.('.portfolio-content')
-      if (portfolioContent) return
+      if (isScrollableTarget(e.target as HTMLElement)) return
 
       if (e.deltaY < 0 && experienceHeldRef.current) {
         experienceHeldRef.current = false
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current)
-          holdTimerRef.current = null
-        }
+        if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null }
       }
-
-      if (experienceHeldRef.current) {
-        e.preventDefault()
-        return
-      }
+      if (experienceHeldRef.current) { e.preventDefault(); return }
 
       scrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' })
       e.preventDefault()
     }
 
-    // Mobile: forward touch events
+    // Mobile: forward touch
     const handleTouchStart = (e: TouchEvent) => {
       touchStartY.current = e.touches[0].clientY
     }
 
     const handleTouchMove = (e: TouchEvent) => {
-      if ((e.target as HTMLElement).closest?.('.experience-panel')) return
-      // Allow portfolio-content (cards/calendly) to scroll natively,
-      // but forward touch during the title phase so user can keep scrolling
-      const portfolioContent = (e.target as HTMLElement).closest?.('.portfolio-content')
-      if (portfolioContent) return
+      if (isScrollableTarget(e.target as HTMLElement)) return
+      // Let the native scroll container handle if touch lands directly on it
+      if ((e.target as HTMLElement).closest?.('.scroll-container')) return
 
       const deltaY = touchStartY.current - e.touches[0].clientY
       touchStartY.current = e.touches[0].clientY
 
       if (deltaY < 0 && experienceHeldRef.current) {
         experienceHeldRef.current = false
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current)
-          holdTimerRef.current = null
-        }
+        if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null }
       }
-
-      if (experienceHeldRef.current) {
-        e.preventDefault()
-        return
-      }
+      if (experienceHeldRef.current) { e.preventDefault(); return }
 
       scrollRef.current?.scrollBy({ top: deltaY, behavior: 'auto' })
       e.preventDefault()
     }
 
-    el.addEventListener('wheel', handleWheel, { passive: false })
-    el.addEventListener('touchstart', handleTouchStart, { passive: true })
-    el.addEventListener('touchmove', handleTouchMove, { passive: false })
+    // Attach to document so it captures touch on ALL overlays (hero, ui, portfolio)
+    document.addEventListener('wheel', handleWheel, { passive: false })
+    document.addEventListener('touchstart', handleTouchStart, { passive: true })
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
 
     return () => {
-      el.removeEventListener('wheel', handleWheel)
-      el.removeEventListener('touchstart', handleTouchStart)
-      el.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('wheel', handleWheel)
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchmove', handleTouchMove)
     }
   }, []) // all dynamic state accessed via refs
 
