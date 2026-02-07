@@ -7,8 +7,8 @@ import type { Theme } from '../App'
 import type { PerfPreset } from '../utils/devicePerf'
 
 const ROAD_WIDTH = 10
-const SIDE_OFFSET = 8
-const COUNT_PER_SIDE = 500
+const SIDE_OFFSET = 5
+const COUNT_PER_SIDE = 50
 const BUILDING_WIDTH = 5
 
 const MONTH_MAP: Record<string, number> = {
@@ -466,14 +466,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
             shadow-camera-near={0.5}
             shadow-camera-far={height * 2.5}
           />
-          {/* Low ground-level fill — lights up the base and road (no shadow) */}
-          <pointLight
-            position={[0, 1, 0]}
-            color={isLight ? '#cccccc' : '#888888'}
-            intensity={isLight ? 1 : 2}
-            distance={height * 2}
-            decay={2}
-          />
         </>
       )}
 
@@ -508,7 +500,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
           shadow-mapSize-width={512}
           shadow-mapSize-height={512}
           shadow-bias={-0.0005}
-          shadow-camera-near={0.3}
+          shadow-camera-near={0.9}
           shadow-camera-far={12}
         />
       )}
@@ -641,6 +633,11 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 16, xRange: 5, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 3 },
       // Skyline row: distant tall silhouettes for city skyline effect
       { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 22, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
+      
+      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 30, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
+      
+      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 50, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
+      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 200, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
     ]
 
     // Only cap heights near experience buildings that have landmarks behind them
@@ -898,7 +895,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       {/* Background building bodies (5 rows × 2 sides) */}
       <instancedMesh
         ref={instancedRef}
-        args={[geometry, material, COUNT_PER_SIDE * 12]}
+        args={[geometry, material, perf.buildingCount * 12]}
         castShadow
         receiveShadow
         frustumCulled={false}

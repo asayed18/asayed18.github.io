@@ -316,7 +316,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   })
 
   // Cache vFov since it won't change
-  const vFov = useMemo(() => THREE.MathUtils.degToRad(60), [])
+  const vFov = useMemo(() => THREE.MathUtils.degToRad(75), [])
 
   useFrame((_, delta) => {
     const activeData = activeExperienceId ? expLookup.get(activeExperienceId) : null
@@ -363,21 +363,21 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   return (
     <>
       {theme === 'dark' ? <SkyGradient theme={theme} /> : <color attach="background" args={['#f5f5f5']} />}
-      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.018 : 0.020]} />
+      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.015 : 0.020]} />
       {/* Ambient fill */}
-      <ambientLight intensity={theme === 'light' ? 0.3 : 0.25} />
+      <ambientLight intensity={theme === 'light' ? 0.2 : 0.05} />
       {/* Primary directional light aligned with sun/moon direction */}
       <directionalLight
         position={theme === 'light' ? [15, 70, 10] : [-12, 65, 8]}
-        intensity={theme === 'light' ? 2.0 : 1.4}
-        color={theme === 'light' ? '#ffffff' : '#cccccc'}
+        intensity={theme === 'light' ? 2.0 : 1.5}
+        color={theme === 'light' ? '#efefef' : '#cacaca'}
         castShadow
         shadow-mapSize-width={perf.shadowMapSize}
         shadow-mapSize-height={perf.shadowMapSize}
         shadow-camera-near={0.5}
         shadow-camera-far={100}
-        shadow-camera-left={-25}
-        shadow-camera-right={25}
+        shadow-camera-left={0}
+        shadow-camera-right={0}
         shadow-camera-top={25}
         shadow-camera-bottom={-25}
         shadow-bias={-0.0003}
@@ -386,7 +386,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
       {/* Fill from opposite side */}
       <directionalLight
         position={theme === 'light' ? [-10, 15, -5] : [10, 15, -5]}
-        intensity={theme === 'light' ? 0.15 : 0.2}
+        intensity={theme === 'light' ? 0.55 : 0.4}
       />
       {/* Sun / Moon with lens flare */}
       <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />
@@ -404,13 +404,13 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
           <SSAO
             blendFunction={BlendFunction.MULTIPLY}
             samples={perf.ssaoSamples}
-            radius={0.5}
-            intensity={50}
-            luminanceInfluence={0.3}
+            radius={0.9}
+            intensity={90}
+            luminanceInfluence={0.9}
             worldDistanceThreshold={12}
             worldDistanceFalloff={3}
             worldProximityThreshold={0.8}
-            worldProximityFalloff={0.5}
+            worldProximityFalloff={0.2}
           />
         ) : <></>}
         {perf.enableBloom ? (
@@ -422,8 +422,8 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
           />
         ) : <></>}
         <Vignette
-          offset={theme === 'light' ? 0.35 : 0.25}
-          darkness={theme === 'light' ? 0.55 : 0.7}
+          offset={theme === 'light' ? 0.45 : 0.25}
+          darkness={theme === 'light' ? 0.45 : 0.9}
           blendFunction={BlendFunction.NORMAL}
         />
         <Noise

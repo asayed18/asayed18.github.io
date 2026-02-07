@@ -11,7 +11,7 @@ interface RoadProps {
 
 export function Road({ length, theme }: RoadProps) {
   const geometry = useMemo(() => {
-    const g = new THREE.PlaneGeometry(ROAD_WIDTH, length)
+    const g = new THREE.PlaneGeometry(ROAD_WIDTH*10, length)
     g.rotateX(-Math.PI / 2)
     return g
   }, [length])
@@ -20,8 +20,8 @@ export function Road({ length, theme }: RoadProps) {
     <mesh geometry={geometry} position={[0, 0, length / 2]} receiveShadow>
       <meshStandardMaterial
         color={theme === 'light' ? '#d8d8d8' : '#303030'}
-        roughness={theme === 'light' ? 0.8 : 0.55}
-        metalness={theme === 'light' ? 0.05 : 0.15}
+        roughness={theme === 'light' ? 0.8 : 1.95}
+        metalness={theme === 'light' ? 0.15 : 0.15}
       />
     </mesh>
   )
