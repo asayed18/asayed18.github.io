@@ -1,0 +1,66 @@
+.fallback-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+  padding: 2rem;
+}
+
+.fallback-content {
+  max-width: 560px;
+  text-align: center;
+}
+
+.fallback-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter: grayscale(100%);
+  margin-bottom: 1.5rem;
+  border: 3px solid var(--hero-avatar-border);
+}
+
+.fallback-name {
+  margin: 0 0 0.25rem;
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.fallback-role {
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.fallback-bio {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.fallback-note {
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.fallback-links {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+}
+
+.fallback-links a {
+  font-size: 0.9rem;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.fallback-links a:hover {
+  opacity: 1;
+}

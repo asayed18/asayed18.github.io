@@ -1,0 +1,351 @@
+.portfolio-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding-top: 3.5rem;
+}
+
+.portfolio-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--panel-bg);
+}
+
+.portfolio-hero-title {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+.portfolio-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1100px;
+  padding: 5rem 2rem 4rem;
+  margin: 0 auto;
+  will-change: opacity;
+}
+
+.portfolio-heading {
+  margin: 0 0 0.35rem;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.portfolio-subheading {
+  margin: 0 0 2.5rem;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+/* Collage grid – columns, cards flow naturally based on image proportions */
+.portfolio-grid {
+  columns: 2;
+  column-gap: 1rem;
+}
+
+.portfolio-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--tag-bg);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  break-inside: avoid;
+  margin-bottom: 1rem;
+  will-change: transform, opacity;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+a.portfolio-card {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.portfolio-card:hover {
+  border-color: var(--text-muted);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.portfolio-card-thumb {
+  width: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.portfolio-card-thumb img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: grayscale(100%);
+  transition: filter 0.35s ease;
+}
+
+.portfolio-card:hover .portfolio-card-thumb img {
+  filter: grayscale(60%);
+}
+
+.portfolio-card-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.portfolio-card-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.portfolio-card--large .portfolio-card-title {
+  font-size: 1.25rem;
+}
+
+.portfolio-card-desc {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.portfolio-card--large .portfolio-card-desc {
+  font-size: 0.9rem;
+}
+
+.portfolio-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.portfolio-card-tag {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--tag-bg);
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.portfolio-card-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.portfolio-card-link:hover {
+  opacity: 1;
+}
+
+/* Call-to-action + Calendly */
+.portfolio-cta {
+  margin-top: 60vh;
+  padding: 3rem 0 4rem;
+  text-align: center;
+}
+
+.portfolio-cta-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+/* Fireworks */
+.portfolio-fireworks {
+  position: relative;
+  height: 160px;
+  width: 100%;
+  max-width: 600px;
+  margin: 2rem auto;
+  transition: height 0.6s ease, margin 0.6s ease, opacity 0.4s ease;
+  overflow: hidden;
+}
+
+.portfolio-fireworks--done {
+  height: 0;
+  margin: 0.25rem auto;
+  opacity: 0;
+}
+
+.firework {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.firework--0 { left: 25%; top: 50%; }
+.firework--1 { left: 50%; top: 35%; }
+.firework--2 { left: 75%; top: 55%; }
+
+.firework-spark {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0;
+}
+
+/* Each spark flies outward in a different direction */
+.firework-spark--0  { --angle: 0deg; }
+.firework-spark--1  { --angle: 30deg; }
+.firework-spark--2  { --angle: 60deg; }
+.firework-spark--3  { --angle: 90deg; }
+.firework-spark--4  { --angle: 120deg; }
+.firework-spark--5  { --angle: 150deg; }
+.firework-spark--6  { --angle: 180deg; }
+.firework-spark--7  { --angle: 210deg; }
+.firework-spark--8  { --angle: 240deg; }
+.firework-spark--9  { --angle: 270deg; }
+.firework-spark--10 { --angle: 300deg; }
+.firework-spark--11 { --angle: 330deg; }
+
+/* Launch trail (rises up before burst) */
+.firework::before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 0;
+  background: linear-gradient(to top, transparent, var(--text-muted));
+  bottom: 0;
+  left: -1px;
+  opacity: 0;
+}
+
+.portfolio-fireworks--active .firework--0::before {
+  animation: fireworkTrail 0.5s ease-out 0.3s forwards;
+}
+.portfolio-fireworks--active .firework--1::before {
+  animation: fireworkTrail 0.5s ease-out 0.7s forwards;
+}
+.portfolio-fireworks--active .firework--2::before {
+  animation: fireworkTrail 0.5s ease-out 1.0s forwards;
+}
+
+.portfolio-fireworks--active .firework--0 .firework-spark {
+  animation: fireworkBurst 0.8s ease-out 0.8s forwards;
+}
+.portfolio-fireworks--active .firework--1 .firework-spark {
+  animation: fireworkBurst 0.8s ease-out 1.2s forwards;
+}
+.portfolio-fireworks--active .firework--2 .firework-spark {
+  animation: fireworkBurst 0.8s ease-out 1.5s forwards;
+}
+
+@keyframes fireworkTrail {
+  0% {
+    height: 0;
+    opacity: 0;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    height: 50px;
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+}
+
+@keyframes fireworkBurst {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(0) scale(1);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(-50px) scale(0.3);
+  }
+}
+
+.portfolio-cta-subtitle {
+  margin: 0 0 2rem;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(15px);
+  transition: opacity 0.6s ease 1.6s, transform 0.6s ease 1.6s;
+}
+
+.portfolio-calendly {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  border-radius: 10px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease 2.0s, transform 0.6s ease 2.0s;
+}
+
+.portfolio-cta-title.portfolio-cta--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.portfolio-cta-subtitle.portfolio-cta--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.portfolio-calendly.portfolio-cta--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.portfolio-calendly-scale {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  filter: grayscale(100%);
+}
+
+.portfolio-calendly-scale iframe {
+  display: block;
+  border: none;
+  width: 100%;
+  height: 700px;
+}
+
+@media (max-width: 520px) {
+  .portfolio-grid {
+    columns: 1;
+  }
+
+  .portfolio-content {
+    padding: 3rem 1.25rem;
+  }
+}
