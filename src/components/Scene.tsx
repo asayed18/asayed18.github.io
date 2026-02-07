@@ -363,7 +363,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   return (
     <>
       {theme === 'dark' ? <SkyGradient theme={theme} /> : <color attach="background" args={['#f5f5f5']} />}
-      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.021 : 0.022]} />
+      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.018 : 0.020]} />
       {/* Ambient fill */}
       <ambientLight intensity={theme === 'light' ? 0.3 : 0.25} />
       {/* Primary directional light aligned with sun/moon direction */}
