@@ -18,7 +18,7 @@ export function Road({ length, theme }: RoadProps) {
 
   return (
     <mesh geometry={geometry} position={[0, 0, length / 2]}>
-      <meshStandardMaterial color={theme === 'light' ? '#d8d8d8' : '#353535'} />
+      <meshStandardMaterial color={theme === 'light' ? '#d8d8d8' : '#303030'} />
     </mesh>
   )
 }

@@ -6,6 +6,7 @@
   align-items: flex-start;
   justify-content: center;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-top: 3.5rem;
 }
 

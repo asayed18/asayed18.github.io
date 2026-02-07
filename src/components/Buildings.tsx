@@ -52,40 +52,90 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   // Match the background building body color
   const stoneColor = isLight ? '#909090' : '#030303'
   const stoneEmissive = isLight ? '#606060' : '#000000'
+  // White limestone capstone for the Great Pyramid
+  const capColor = isLight ? '#f0ece4' : '#444038'
+  const capEmissive = isLight ? '#d8d0c0' : '#2a2820'
 
-  // Distant silhouettes behind the first experience building
-  const pyramids: { x: number; z: number; height: number; radius: number }[] = [
+  // Distant silhouettes behind the first experience building — pushed further back, scaled up
+  const pyramids: { x: number; z: number; height: number; radius: number; hasCap?: boolean }[] = [
     // Great Pyramid of Khufu
-    { x: 50, z: 10, height: 28, radius: 21 },
+    { x: 80, z: 18, height: 35, radius: 34, hasCap: true },
     // Pyramid of Khafre
-    { x: 42, z: -2, height: 25, radius: 18 },
+    { x: 65, z: -6, height: 31, radius: 30 },
     // Pyramid of Menkaure
-    { x: 35, z: -12, height: 15, radius: 11 },
+    { x: 50, z: -28, height: 18, radius: 18 },
     // Queen's pyramids (small satellites)
-    { x: 31, z: -18, height: 6, radius: 4.5 },
-    { x: 29, z: -14, height: 5.5, radius: 4 },
-    { x: 27, z: -10, height: 5, radius: 3.5 },
+    { x: 44, z: -40, height: 7.5, radius: 7.5 },
+    { x: 40, z: -34, height: 7, radius: 7 },
+    { x: 36, z: -28, height: 6, radius: 6 },
   ]
+
+  // Capstone proportions: top 20% of the pyramid height
+  const capRatio = 0.20
+  // Ledge band color (slightly darker than cap for depth contrast)
+  const ledgeColor = isLight ? '#d0c8b8' : '#333028'
 
   return (
     <group>
-      {pyramids.map((p, i) => (
-        <mesh
-          key={`pyramid-${i}`}
-          position={[p.x, p.height / 2, p.z]}
-          rotation={[0, Math.PI / 4, 0]}
-          castShadow
-          receiveShadow
-        >
-          <coneGeometry args={[p.radius, p.height, 4]} />
-          <meshStandardMaterial
-            color={stoneColor}
-            emissive={stoneEmissive}
-            emissiveIntensity={0.5}
-            flatShading
-          />
-        </mesh>
-      ))}
+      {pyramids.map((p, i) => {
+        const capHeight = p.height * capRatio
+        const capRadius = p.radius * capRatio
+        const capBaseY = p.height * (1 - capRatio)
+        // Ledge sits at the junction between body and capstone
+        const ledgeThickness = capHeight * 0.08
+        const ledgeRadius = capRadius * 1.25
+
+        return (
+          <group key={`pyramid-${i}`}>
+            <mesh
+              position={[p.x, p.height / 2, p.z]}
+              rotation={[0, Math.PI / 4, 0]}
+              castShadow
+              receiveShadow
+            >
+              <coneGeometry args={[p.radius, p.height, 4]} />
+              <meshStandardMaterial
+                color={stoneColor}
+                emissive={stoneEmissive}
+                emissiveIntensity={0.5}
+                flatShading
+              />
+            </mesh>
+            {/* White limestone capstone on the Great Pyramid */}
+            {p.hasCap && (
+              <>
+                {/* Capstone cone */}
+                <mesh
+                  position={[p.x, capBaseY + capHeight / 2, p.z]}
+                  rotation={[0, Math.PI / 4, 0]}
+                  castShadow
+                >
+                  <coneGeometry args={[capRadius, capHeight, 4]} />
+                  <meshStandardMaterial
+                    color={capColor}
+                    emissive={capEmissive}
+                    emissiveIntensity={0.7}
+                    flatShading
+                  />
+                </mesh>
+                {/* Protruding ledge band at capstone base for 3D depth */}
+                <mesh
+                  position={[p.x, capBaseY + ledgeThickness / 2, p.z]}
+                  rotation={[0, Math.PI / 4, 0]}
+                >
+                  <boxGeometry args={[ledgeRadius * 2, ledgeThickness, ledgeRadius * 2]} />
+                  <meshStandardMaterial
+                    color={ledgeColor}
+                    emissive={capEmissive}
+                    emissiveIntensity={0.4}
+                    flatShading
+                  />
+                </mesh>
+              </>
+            )}
+          </group>
+        )
+      })}
     </group>
   )
 })
@@ -93,20 +143,20 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
 /* ── Berlin Fernsehturm (TV Tower) landmark behind the fifth experience ── */
 const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const towerColor = isLight ? '#909090' : '#030303'
-  const towerEmissive = isLight ? '#606060' : '#000000'
+  const towerColor = isLight ? '#353535' : '#0a0a0a'
+  const towerEmissive = isLight ? '#131313' : '#131313'
 
-  const shaftHeight = 42
-  const shaftRadiusBottom = 1.8
-  const shaftRadiusTop = 0.9
-  const sphereRadius = 5
+  const shaftHeight = 40
+  const shaftRadiusBottom = 2.2
+  const shaftRadiusTop = 1.1
+  const sphereRadius = 6
   const sphereY = shaftHeight * 0.72
-  const antennaHeight = 14
+  const antennaHeight = 16
   const antennaY = sphereY + sphereRadius + antennaHeight / 2
 
-  // Position far behind and offset in Z so it's visible beside the experience building
-  const towerX = 50
-  const towerZ = -18
+  // Position behind the 5th experience building, further from the road
+  const towerX = 65
+  const towerZ = 10
 
   return (
     <group position={[towerX, 0, towerZ]}>
@@ -132,7 +182,7 @@ const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
 
       {/* Small collar / ring below the sphere */}
       <mesh position={[0, sphereY - sphereRadius * 0.7, 0]}>
-        <cylinderGeometry args={[3.2, 2.5, 2, 8]} />
+        <cylinderGeometry args={[3.8, 3, 2.2, 8]} />
         <meshStandardMaterial
           color={towerColor}
           emissive={towerEmissive}
@@ -521,8 +571,8 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     // the road so they only affect buildings at high |X| values.
     const pyramidZ = experiences[0] ? experiences[0].position * roadLength : 0
     expZones.push(
-      // Corridor from road toward the pyramids (right side, +X)
-      { x: 35, z: pyramidZ, hw: 8, hd: 20 },
+      // Corridor from road toward the pyramids (right side, +X) — wider to match pushed-back pyramids
+      { x: 50, z: pyramidZ, hw: 18, hd: 25 },
     )
     if (experiences[4]) {
       const towerZ = experiences[4].position * roadLength - 18

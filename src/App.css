@@ -9,6 +9,7 @@
   inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: none;
   z-index: 0;
   scroll-behavior: auto;
   background: transparent;

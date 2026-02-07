@@ -42,6 +42,46 @@ function App() {
 
   const uiOverlayRef = useRef<HTMLDivElement>(null)
 
+  // --- Experience-zone hold: pause briefly when entering, then resume at full speed ---
+  const experienceHeldRef = useRef(false)
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevExperienceRef = useRef<string | null>(null)
+  const prevScrollProgress = useRef(scrollProgress)
+
+  useEffect(() => {
+    // Determine scroll direction (forward = toward portfolio, backward = toward hero)
+    const scrollingForward = scrollProgress >= prevScrollProgress.current
+    prevScrollProgress.current = scrollProgress
+
+    // Entering a NEW experience zone while scrolling FORWARD → freeze briefly.
+    // Scrolling backward (retreating from portfolio / revisiting) should never freeze.
+    if (
+      activeExperienceId &&
+      activeExperienceId !== prevExperienceRef.current &&
+      scrollingForward
+    ) {
+      experienceHeldRef.current = true
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = setTimeout(() => {
+        experienceHeldRef.current = false
+      }, 1200) // 1.2 s pause — enough to notice the panel
+    }
+
+    // Left any zone or scrolling backward → cancel hold immediately
+    if (!activeExperienceId || !scrollingForward) {
+      experienceHeldRef.current = false
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current)
+        holdTimerRef.current = null
+      }
+    }
+
+    prevExperienceRef.current = activeExperienceId
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    }
+  }, [activeExperienceId, scrollProgress])
+
   // Register non-passive wheel listener so preventDefault works
   useEffect(() => {
     const el = uiOverlayRef.current
@@ -50,13 +90,20 @@ function App() {
       if ((e.target as HTMLElement).closest?.('.experience-panel')) return
       // Don't intercept when portfolio overlay is active — let it scroll naturally
       if ((e.target as HTMLElement).closest?.('.portfolio-overlay')) return
-      const scrollSpeed = activeExperienceId ? 0.3 : 1
-      scrollRef.current?.scrollBy({ top: e.deltaY * scrollSpeed, behavior: 'auto' })
+
+      // During the brief hold after entering an experience zone, block scrolling
+      if (experienceHeldRef.current) {
+        e.preventDefault()
+        return
+      }
+
+      // Normal speed — no artificial slowdown
+      scrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' })
       e.preventDefault()
     }
     el.addEventListener('wheel', handleWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleWheel)
-  }, [activeExperienceId])
+  }, []) // all dynamic state accessed via refs
 
   const [aboutOpen, setAboutOpen] = useState(false)
   const [sceneReady, setSceneReady] = useState(false)

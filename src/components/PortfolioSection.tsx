@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { portfolioProjects } from '../data/portfolio'
 import './PortfolioSection.css'
 
@@ -15,23 +15,46 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
 
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  // Forward wheel events to the scroll container — blocked during fireworks
-  // When at the top of the overlay and scrolling up, forward to main scroll to dismiss
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (fireworksPlaying) {
-      e.preventDefault()
-      return
-    }
-    const overlay = overlayRef.current
-    const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
-    if (!scrollContainer) return
+  // Keep progress & fireworks state in refs so the wheel handler always has
+  // the latest values without needing to re-register the listener every frame.
+  const progressRef = useRef(progress)
+  progressRef.current = progress
+  const fireworksRef = useRef(fireworksPlaying)
+  fireworksRef.current = fireworksPlaying
 
-    // If scrolling up and the overlay is at the top, forward to main scroll
-    if (overlay && e.deltaY < 0 && overlay.scrollTop <= 0) {
-      scrollContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
-      e.preventDefault()
+  // Register a non-passive wheel listener so preventDefault actually works
+  // (React's onWheel is passive and cannot prevent default scrolling).
+  useEffect(() => {
+    const el = overlayRef.current
+    if (!el) return
+    const handleWheel = (e: WheelEvent) => {
+      if (fireworksRef.current) {
+        e.preventDefault()
+        return
+      }
+      const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+      if (!scrollContainer) return
+
+      // While the portfolio is still transitioning in, forward ALL wheel
+      // events to the main scroll container so scrollProgress keeps advancing.
+      if (progressRef.current < 1) {
+        el.scrollTop = 0 // keep overlay at top during transition
+        scrollContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
+        e.preventDefault()
+        return
+      }
+
+      // Fully visible — if scrolling up and the overlay is at the top,
+      // forward to main scroll to let the user dismiss the portfolio.
+      if (e.deltaY < 0 && el.scrollTop <= 0) {
+        scrollContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
+        e.preventDefault()
+      }
     }
-  }, [fireworksPlaying])
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress > 0]) // re-run when overlay mounts/unmounts; refs keep other values fresh
 
   // Track CTA visibility within the scrollable overlay
   const ctaRef = useRef<HTMLDivElement>(null)
@@ -71,10 +94,12 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
     <div
       ref={overlayRef}
       className="portfolio-overlay"
-      onWheel={handleWheel}
       style={{
         opacity,
         pointerEvents: progress > 0.3 ? 'auto' : 'none',
+        // Lock native scroll during transition to prevent trackpad inertia
+        // from conflicting with programmatic scroll forwarding.
+        overflowY: progress >= 1 ? 'auto' : 'hidden',
       }}
     >
       <div

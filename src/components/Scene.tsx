@@ -131,7 +131,10 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
       const cameraOffsetZ = -(requiredDist * 0.85)
       const cameraOffsetY = lookAtY + requiredDist * 0.15
       _targetCameraPos.current.set(cameraOffsetX, cameraOffsetY, buildingZ + cameraOffsetZ)
-      _currentCameraPos.current.set(0, CAMERA_HEIGHT, z)
+      // Lerp from the camera's actual current position — NOT the road position.
+      // Resetting to (0, CAMERA_HEIGHT, z) every frame would discard accumulated
+      // lerp progress and fight with the still-moving smoothProgress, causing shaking.
+      _currentCameraPos.current.copy(camera.position)
       _currentCameraPos.current.lerp(_targetCameraPos.current, Math.min(delta * 2, 1))
       camera.position.copy(_currentCameraPos.current)
     } else {
@@ -147,7 +150,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   return (
     <>
       <color attach="background" args={[colors.background]} />
-      <fogExp2 attach="fog" args={[colors.fog, 0.025]} />
+      <fogExp2 attach="fog" args={[colors.fog, 0.021]} />
       <ambientLight intensity={theme === 'light' ? 0.6 : 0.35} />
       <directionalLight
         position={[15, 30, 10]}
