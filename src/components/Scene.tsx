@@ -266,7 +266,15 @@ interface SceneProps {
 }
 
 export function Scene({ scrollProgress, experiences, activeExperienceId, theme, perf, onReady }: SceneProps) {
-  const { camera } = useThree()
+  const { camera, gl } = useThree()
+
+  // Clamp pixel ratio to perf tier's max
+  useEffect(() => {
+    const maxDpr = perf.dpr[1]
+    const deviceDpr = window.devicePixelRatio || 1
+    gl.setPixelRatio(Math.min(deviceDpr, maxDpr))
+  }, [gl, perf.dpr])
+
   const smoothProgress = useRef(0)
   const smoothLookAt = useRef(new THREE.Vector3(0, 0, LOOK_AHEAD))
   const readyFired = useRef(false)
