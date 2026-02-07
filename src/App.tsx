@@ -1,8 +1,9 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { experiences, TOTAL_SCROLL_HEIGHT_VH } from './data/experiences'
 import { useScrollToDistance } from './hooks/useScrollToDistance'
 import { Scene } from './components/Scene'
+import { getPerf } from './utils/devicePerf'
 import { ExperiencePanel } from './components/ExperiencePanel'
 import { Header } from './components/Header'
 import { HeroOverlay } from './components/HeroOverlay'
@@ -16,6 +17,7 @@ export type Theme = 'dark' | 'light'
 const HERO_DONE_AT = 0.02
 
 function App() {
+  const perf = useMemo(() => getPerf(), [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const { scrollProgress, activeExperienceId } = useScrollToDistance(scrollRef, experiences)
   const activeExperience = experiences.find((e) => e.id === activeExperienceId) ?? null
@@ -158,17 +160,18 @@ function App() {
       </div>
       <div className="canvas-wrapper">
         <Canvas
-          gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
-          shadows
+          gl={{ antialias: perf.antialias, alpha: false, powerPreference: 'high-performance' }}
+          shadows={perf.enableShadows}
           camera={{ position: [0, 3, 0], fov: 60 }}
-          dpr={[1, 1.5]}
-          performance={{ min: 0.5 }}
+          dpr={perf.dpr}
+          performance={{ min: perf.perfMin }}
         >
           <Scene
             scrollProgress={scrollProgress}
             experiences={experiences}
             activeExperienceId={activeExperienceId}
             theme={theme}
+            perf={perf}
             onReady={() => setSceneReady(true)}
           />
         </Canvas>

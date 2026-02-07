@@ -4,6 +4,7 @@ import { useTexture, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import type { Experience } from '../data/experiences'
 import type { Theme } from '../App'
+import type { PerfPreset } from '../utils/devicePerf'
 
 const ROAD_WIDTH = 10
 const SIDE_OFFSET = 8
@@ -43,6 +44,7 @@ interface BuildingsProps {
   experiences: Experience[]
   activeExperienceId: string | null
   theme: Theme
+  perf: PerfPreset
   onReady?: () => void
 }
 
@@ -363,6 +365,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   startYear,
   isActive,
   isLight,
+  enableShadows = true,
 }: {
   x: number
   width: number
@@ -372,6 +375,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   startYear: number
   isActive: boolean
   isLight: boolean
+  enableShadows?: boolean
 }) {
   const sharedWindowGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
   const sharedLedgeGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
@@ -448,14 +452,14 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
       {/* Lights that illuminate the building and cast onto surrounding buildings */}
       {isActive && (
         <>
-          {/* Main overhead light — casts shadows onto nearby buildings */}
+          {/* Main overhead light */}
           <pointLight
             position={[0, height + 3, 0]}
             color={isLight ? '#e0e0e0' : '#bbbbbb'}
             intensity={isLight ? 3 : 5}
             distance={height * 3}
             decay={2}
-            castShadow
+            castShadow={enableShadows}
             shadow-mapSize-width={512}
             shadow-mapSize-height={512}
             shadow-bias={-0.0005}
@@ -492,7 +496,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
         </mesh>
       ))}
 
-      {/* Single window-spill light when active (replaces per-floor lights for performance) */}
+      {/* Single window-spill light when active */}
       {isActive && (
         <pointLight
           position={[(x > 0 ? -1 : 1) * (width / 2 + 1), height * 0.5, 0]}
@@ -500,7 +504,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
           intensity={isLight ? 1.5 : 3}
           distance={12}
           decay={2}
-          castShadow
+          castShadow={enableShadows}
           shadow-mapSize-width={512}
           shadow-mapSize-height={512}
           shadow-bias={-0.0005}
@@ -555,7 +559,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   )
 })
 
-export function Buildings({ roadLength, experiences, activeExperienceId, theme, onReady }: BuildingsProps) {
+export function Buildings({ roadLength, experiences, activeExperienceId, theme, perf, onReady }: BuildingsProps) {
   const isLight = theme === 'light'
   const instancedRef = useRef<THREE.InstancedMesh>(null)
   const { positions, scales, ledgeInstances, windowInstances } = useMemo(() => {
@@ -625,17 +629,18 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
 
     // Row definitions: multiple rows create a dense cityscape
     // Each row has its own X band so they don't compete for the same space
+    const bCount = perf.buildingCount
     const rows = [
       // Front row: close to road, tallest
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET, xRange: 5, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 4, hRange: 12, seedOffset: 0, zJitter: 1.5 },
+      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET, xRange: 5, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 4, hRange: 12, seedOffset: 0, zJitter: 1.5 },
       // Middle row: behind front
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 6, xRange: 4, wMin: 2, wRange: 4, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 5000, zJitter: 2 },
+      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 6, xRange: 4, wMin: 2, wRange: 4, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 5000, zJitter: 2 },
       // Back row: shorter fill
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 11, xRange: 4, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 2.5 },
+      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 11, xRange: 4, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 2.5 },
       // Deep row: more fill far back
-      { count: COUNT_PER_SIDE, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 16, xRange: 5, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 3 },
+      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 16, xRange: 5, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 3 },
       // Skyline row: distant tall silhouettes for city skyline effect
-      { count: Math.floor(COUNT_PER_SIDE * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 22, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
+      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 22, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
     ]
 
     // Only cap heights near experience buildings that have landmarks behind them
@@ -725,7 +730,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     }
 
     return { positions, scales, ledgeInstances, windowInstances }
-  }, [roadLength, experiences])
+  }, [roadLength, experiences, perf.buildingCount])
 
   const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
   const material = useMemo(
@@ -943,6 +948,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
               startYear={startYear}
               isActive={isActive}
               isLight={isLight}
+              enableShadows={perf.buildingShadows}
             />
             {exp.logo && (
               <group position={[x, buildingHeight, 0]}>

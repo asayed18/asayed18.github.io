@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js'
 import type { Experience } from '../data/experiences'
 import type { Theme } from '../App'
+import type { PerfPreset } from '../utils/devicePerf'
 import { Road } from './Road'
 import { Buildings } from './Buildings'
 
@@ -106,7 +107,7 @@ function createRingTexture(size: number, color: string): THREE.Texture {
 const SUN_OFFSET = new THREE.Vector3(15, 70, 10)
 const MOON_OFFSET = new THREE.Vector3(-12, 65, 8)
 
-function CelestialBody({ isLight }: { isLight: boolean }) {
+function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; segments?: number }) {
   const groupRef = useRef<THREE.Group>(null)
   const flareHost = useRef<THREE.Mesh>(null)
 
@@ -167,12 +168,12 @@ function CelestialBody({ isLight }: { isLight: boolean }) {
       />
       {/* Glowing sphere */}
       <mesh ref={flareHost}>
-        <sphereGeometry args={[bodyRadius, 16, 16]} />
+        <sphereGeometry args={[bodyRadius, segments, segments]} />
         <meshBasicMaterial color={isLight ? '#ffffff' : '#e8ecf4'} toneMapped={false} />
       </mesh>
       {/* Inner glow halo */}
       <mesh>
-        <sphereGeometry args={[bodyRadius * 1.4, 12, 12]} />
+        <sphereGeometry args={[bodyRadius * 1.4, segments, segments]} />
         <meshBasicMaterial
           color={isLight ? '#fffae8' : '#c8d4e4'}
           transparent
@@ -183,7 +184,7 @@ function CelestialBody({ isLight }: { isLight: boolean }) {
       </mesh>
       {/* Outer glow halo */}
       <mesh>
-        <sphereGeometry args={[bodyRadius * 2.2, 12, 12]} />
+        <sphereGeometry args={[bodyRadius * 2.2, segments, segments]} />
         <meshBasicMaterial
           color={isLight ? '#fff0d0' : '#a0b0c8'}
           transparent
@@ -260,10 +261,11 @@ interface SceneProps {
   experiences: Experience[]
   activeExperienceId: string | null
   theme: Theme
+  perf: PerfPreset
   onReady?: () => void
 }
 
-export function Scene({ scrollProgress, experiences, activeExperienceId, theme, onReady }: SceneProps) {
+export function Scene({ scrollProgress, experiences, activeExperienceId, theme, perf, onReady }: SceneProps) {
   const { camera } = useThree()
   const smoothProgress = useRef(0)
   const smoothLookAt = useRef(new THREE.Vector3(0, 0, LOOK_AHEAD))
@@ -362,8 +364,8 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
         intensity={theme === 'light' ? 2.0 : 1.4}
         color={theme === 'light' ? '#ffffff' : '#cccccc'}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={perf.shadowMapSize}
+        shadow-mapSize-height={perf.shadowMapSize}
         shadow-camera-near={0.5}
         shadow-camera-far={100}
         shadow-camera-left={-25}
@@ -379,33 +381,38 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
         intensity={theme === 'light' ? 0.15 : 0.2}
       />
       {/* Sun / Moon with lens flare */}
-      <CelestialBody isLight={theme === 'light'} />
+      <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />
       <Road length={ROAD_LENGTH} theme={theme} />
       <Buildings
         roadLength={ROAD_LENGTH}
         experiences={experiences}
         activeExperienceId={activeExperienceId}
         theme={theme}
+        perf={perf}
         onReady={handleBuildingsReady}
       />
-      <EffectComposer multisampling={0} enableNormalPass>
-        <SSAO
-          blendFunction={BlendFunction.MULTIPLY}
-          samples={6}
-          radius={0.5}
-          intensity={50}
-          luminanceInfluence={0.3}
-          worldDistanceThreshold={12}
-          worldDistanceFalloff={3}
-          worldProximityThreshold={0.8}
-          worldProximityFalloff={0.5}
-        />
-        <Bloom
-          intensity={theme === 'light' ? 0.4 : 0.7}
-          luminanceThreshold={theme === 'light' ? 0.6 : 0.35}
-          luminanceSmoothing={0.3}
-          mipmapBlur
-        />
+      <EffectComposer multisampling={0} enableNormalPass={perf.enableSSAO}>
+        {perf.enableSSAO ? (
+          <SSAO
+            blendFunction={BlendFunction.MULTIPLY}
+            samples={perf.ssaoSamples}
+            radius={0.5}
+            intensity={50}
+            luminanceInfluence={0.3}
+            worldDistanceThreshold={12}
+            worldDistanceFalloff={3}
+            worldProximityThreshold={0.8}
+            worldProximityFalloff={0.5}
+          />
+        ) : <></>}
+        {perf.enableBloom ? (
+          <Bloom
+            intensity={theme === 'light' ? 0.4 : 0.7}
+            luminanceThreshold={theme === 'light' ? 0.6 : 0.35}
+            luminanceSmoothing={0.3}
+            mipmapBlur
+          />
+        ) : <></>}
         <Vignette
           offset={theme === 'light' ? 0.35 : 0.25}
           darkness={theme === 'light' ? 0.55 : 0.7}
