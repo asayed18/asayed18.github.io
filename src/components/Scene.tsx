@@ -9,6 +9,63 @@ import type { Theme } from '../App'
 import { Road } from './Road'
 import { Buildings } from './Buildings'
 
+/* ── Gradient sky dome ── */
+function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
+  const material = useMemo(() => {
+    const isLight = theme === 'light'
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color(isLight ? '#c8c8c8' : '#000000') },
+        bottomColor: { value: new THREE.Color(isLight ? '#f5f5f5' : '#2a2a2a') },
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPos.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition).y;
+          float t = clamp(h * 0.5 + 0.5, 0.0, 1.0);
+          vec3 color = mix(bottomColor, topColor, t);
+          gl_FragColor = vec4(color, 1.0);
+          #include <colorspace_fragment>
+        }
+      `,
+      glslVersion: THREE.GLSL1,
+      side: THREE.BackSide,
+      depthWrite: false,
+    })
+  }, [theme])
+
+  // Update colors when theme changes
+  useEffect(() => {
+    const isLight = theme === 'light'
+    material.uniforms.topColor.value.set(isLight ? '#c8c8c8' : '#000000')
+    material.uniforms.bottomColor.value.set(isLight ? '#f5f5f5' : '#2a2a2a')
+  }, [theme, material])
+
+  // Follow camera so it's always surrounding the viewer
+  const meshRef = useRef<THREE.Mesh>(null)
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.position.copy(state.camera.position)
+    }
+  })
+
+  return (
+    <mesh ref={meshRef} material={material}>
+      <sphereGeometry args={[500, 32, 32]} />
+    </mesh>
+  )
+}
+
 /* ── Procedural lens-flare textures ── */
 function createFlareTexture(size: number, falloff: number, color: string): THREE.Texture {
   const canvas = document.createElement('canvas')
@@ -295,7 +352,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
 
   return (
     <>
-      <color attach="background" args={[colors.background]} />
+      {theme === 'dark' ? <SkyGradient theme={theme} /> : <color attach="background" args={['#f5f5f5']} />}
       <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.021 : 0.022]} />
       {/* Ambient fill */}
       <ambientLight intensity={theme === 'light' ? 0.3 : 0.25} />

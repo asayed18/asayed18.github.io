@@ -50,16 +50,13 @@ interface BuildingsProps {
 const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
   // Match the background building body color
-  const stoneColor = isLight ? '#909090' : '#3a3a3a'
-  const stoneEmissive = isLight ? '#606060' : '#282828'
-  // White limestone capstone for the Great Pyramid
-  const capColor = isLight ? '#f0ece4' : '#555048'
-  const capEmissive = isLight ? '#d8d0c0' : '#3a3830'
+  const stoneColor = isLight ? '#707070' : '#1a1a1a'
+  const stoneEmissive = isLight ? '#404040' : '#0e0e0e'
 
   // Distant silhouettes behind the first experience building — pushed further back, scaled up
-  const pyramids: { x: number; z: number; height: number; radius: number; hasCap?: boolean }[] = [
+  const pyramids: { x: number; z: number; height: number; radius: number }[] = [
     // Great Pyramid of Khufu
-    { x: 80, z: 18, height: 35, radius: 34, hasCap: true },
+    { x: 80, z: 18, height: 35, radius: 34 },
     // Pyramid of Khafre
     { x: 65, z: -6, height: 31, radius: 30 },
     // Pyramid of Menkaure
@@ -70,72 +67,25 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
     { x: 36, z: -28, height: 6, radius: 6 },
   ]
 
-  // Capstone proportions: top 20% of the pyramid height
-  const capRatio = 0.20
-  // Ledge band color (slightly darker than cap for depth contrast)
-  const ledgeColor = isLight ? '#d0c8b8' : '#333028'
-
   return (
     <group>
-      {pyramids.map((p, i) => {
-        const capHeight = p.height * capRatio
-        const capRadius = p.radius * capRatio
-        const capBaseY = p.height * (1 - capRatio)
-        // Ledge sits at the junction between body and capstone
-        const ledgeThickness = capHeight * 0.08
-        const ledgeRadius = capRadius * 1.25
-
-        return (
-          <group key={`pyramid-${i}`}>
-            <mesh
-              position={[p.x, p.height / 2, p.z]}
-              rotation={[0, Math.PI / 4, 0]}
-              castShadow
-              receiveShadow
-            >
-              <coneGeometry args={[p.radius, p.height, 4]} />
-              <meshStandardMaterial
-                color={stoneColor}
-                emissive={stoneEmissive}
-                emissiveIntensity={0.5}
-                flatShading
-              />
-            </mesh>
-            {/* White limestone capstone on the Great Pyramid */}
-            {p.hasCap && (
-              <>
-                {/* Capstone cone */}
-                <mesh
-                  position={[p.x, capBaseY + capHeight / 2, p.z]}
-                  rotation={[0, Math.PI / 4, 0]}
-                  castShadow
-                >
-                  <coneGeometry args={[capRadius, capHeight, 4]} />
-                  <meshStandardMaterial
-                    color={capColor}
-                    emissive={capEmissive}
-                    emissiveIntensity={0.7}
-                    flatShading
-                  />
-                </mesh>
-                {/* Protruding ledge band at capstone base for 3D depth */}
-                <mesh
-                  position={[p.x, capBaseY + ledgeThickness / 2, p.z]}
-                  rotation={[0, Math.PI / 4, 0]}
-                >
-                  <boxGeometry args={[ledgeRadius * 2, ledgeThickness, ledgeRadius * 2]} />
-                  <meshStandardMaterial
-                    color={ledgeColor}
-                    emissive={capEmissive}
-                    emissiveIntensity={0.4}
-                    flatShading
-                  />
-                </mesh>
-              </>
-            )}
-          </group>
-        )
-      })}
+      {pyramids.map((p, i) => (
+        <mesh
+          key={`pyramid-${i}`}
+          position={[p.x, p.height / 2, p.z]}
+          rotation={[0, Math.PI / 4, 0]}
+          castShadow
+          receiveShadow
+        >
+          <coneGeometry args={[p.radius, p.height, 4]} />
+          <meshStandardMaterial
+            color={stoneColor}
+            emissive={stoneEmissive}
+            emissiveIntensity={0.5}
+            flatShading
+          />
+        </mesh>
+      ))}
     </group>
   )
 })
@@ -598,11 +548,18 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
               font={undefined}
             >
               {String(startYear + floor)}
-              <meshStandardMaterial
-                color={windowColor}
-                transparent
-                opacity={0.8}
-              />
+              {isActive ? (
+                <meshBasicMaterial
+                  color={isLight ? '#e8e8e8' : '#c0c0c0'}
+                  toneMapped={false}
+                />
+              ) : (
+                <meshStandardMaterial
+                  color={windowColor}
+                  transparent
+                  opacity={0.8}
+                />
+              )}
             </Text>
           </group>
         )

@@ -18,7 +18,11 @@ export function Road({ length, theme }: RoadProps) {
 
   return (
     <mesh geometry={geometry} position={[0, 0, length / 2]} receiveShadow>
-      <meshStandardMaterial color={theme === 'light' ? '#d8d8d8' : '#303030'} />
+      <meshStandardMaterial
+        color={theme === 'light' ? '#d8d8d8' : '#303030'}
+        roughness={theme === 'light' ? 0.8 : 0.55}
+        metalness={theme === 'light' ? 0.05 : 0.15}
+      />
     </mesh>
   )
 }

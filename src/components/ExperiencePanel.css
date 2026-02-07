@@ -6,8 +6,8 @@
   display: flex;
   align-items: center;
   background: var(--panel-bg);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: none;
   border-radius: 0;
   box-shadow: none;
@@ -47,7 +47,13 @@
   margin: 0 0 0.35rem;
   font-size: 1.5rem;
   font-weight: 600;
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.7), 0 0 30px rgba(255, 255, 255, 0.4), 0 0 60px rgba(255, 255, 255, 0.2), 0 0 100px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] .experience-panel-title {
   color: var(--text);
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.15), 0 0 20px rgba(0, 0, 0, 0.08);
 }
 
 .experience-panel-company {
@@ -66,7 +72,11 @@
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
   line-height: 1.65;
-  color: var(--text);
+  color: #aaaaaa;
+}
+
+[data-theme="light"] .experience-panel-description {
+  color: #555555;
 }
 
 .experience-panel-tags {
