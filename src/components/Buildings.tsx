@@ -8,7 +8,6 @@ import type { PerfPreset } from '../utils/devicePerf'
 
 const ROAD_WIDTH = 10
 const SIDE_OFFSET = 5
-const COUNT_PER_SIDE = 50
 const BUILDING_WIDTH = 5
 
 const MONTH_MAP: Record<string, number> = {
@@ -52,21 +51,21 @@ interface BuildingsProps {
 const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
   // Match the background building body color
-  const stoneColor = isLight ? '#707070' : '#1a1a1a'
-  const stoneEmissive = isLight ? '#404040' : '#0e0e0e'
+  const stoneColor = isLight ? '#101010' : '#3a3a3a'
+  const stoneEmissive = isLight ? '#101010' : '#2e2e2e'
 
   // Distant silhouettes behind the first experience building — pushed further back, scaled up
   const pyramids: { x: number; z: number; height: number; radius: number }[] = [
     // Great Pyramid of Khufu
-    { x: 95, z: 18, height: 35, radius: 34 },
+    { x: 50, z: -59, height: 20, radius: 20 },
     // Pyramid of Khafre
-    { x: 80, z: -6, height: 31, radius: 30 },
+    { x: 55, z: -20, height: 35, radius: 35 },
     // Pyramid of Menkaure
-    { x: 65, z: -28, height: 18, radius: 18 },
+    // { x: 60, z: 40, height: 20, radius: 18 },
     // Queen's pyramids (small satellites)
-    { x: 58, z: -40, height: 7.5, radius: 7.5 },
-    { x: 54, z: -34, height: 7, radius: 7 },
-    { x: 50, z: -28, height: 6, radius: 6 },
+    // { x: 58, z: -40, height: 7.5, radius: 7.5 },
+    // { x: 54, z: -34, height: 7, radius: 7 },
+    // { x: 50, z: -28, height: 6, radius: 6 },
   ]
 
   return (
@@ -74,7 +73,7 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
       {pyramids.map((p, i) => (
         <mesh
           key={`pyramid-${i}`}
-          position={[p.x, p.height / 2, p.z]}
+          position={[p.x+20, p.height / 2, p.z+60]}
           rotation={[0, Math.PI / 4, 0]}
           castShadow
           receiveShadow
@@ -107,8 +106,8 @@ const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
   const antennaY = sphereY + sphereRadius + antennaHeight / 2
 
   // Position behind the 5th experience building, further from the road
-  const towerX = 65
-  const towerZ = 10
+  const towerX = 30
+  const towerZ = 40
 
   return (
     <group position={[towerX, 0, towerZ]}>
@@ -288,7 +287,7 @@ const Logo3D = memo(function Logo3D({
             color={isLight ? '#cccccc' : '#aaaaaa'}
             intensity={isLight ? 2 : 4}
             distance={12}
-            decay={2}
+            castShadow
           />
         )}
       </group>
@@ -314,7 +313,7 @@ const RoadDateMarking = memo(function RoadDateMarking({
       {/* Left segment of date line (gap in center for text) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-3, 0, 0]}>
         <planeGeometry args={[2.5, 0.08]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={isActive ? (isLight ? '#444444' : '#5a5a5a') : (isLight ? '#777777' : '#555555')}
           transparent
           opacity={isActive ? 0.9 : 0.4}
@@ -324,7 +323,7 @@ const RoadDateMarking = memo(function RoadDateMarking({
       {/* Right segment of date line */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[3, 0, 0]}>
         <planeGeometry args={[2.5, 0.08]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={isActive ? (isLight ? '#444444' : '#5a5a5a') : (isLight ? '#777777' : '#555555')}
           transparent
           opacity={isActive ? 0.9 : 0.4}
@@ -345,7 +344,7 @@ const RoadDateMarking = memo(function RoadDateMarking({
         renderOrder={5}
       >
         {joinDate}
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={isActive ? (isLight ? '#444444' : '#5a5a5a') : (isLight ? '#888888' : '#666666')}
           transparent
           opacity={isActive ? 1 : 0.6}
@@ -420,6 +419,16 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
     return result
   }, [numFloors, floorHeight])
 
+  const texture = useTexture([
+    '/textures/painted_plaster_wall_diff_1k.jpg',
+    '/textures/painted_plaster_wall_nor_gl_1k.jpg',    // After conversion
+    '/textures/painted_plaster_wall_rough_1k.jpg',     // After conversion
+    '/textures/painted_plaster_wall_disp_1k.png'
+  ])
+  texture.forEach(texture => {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+    texture.repeat.set(20, 20)
+  })
   // Monochromatic palette — pure grays, lit up when active
   const bodyColor = isActive
     ? (isLight ? '#eeeeee' : '#707070')
@@ -428,8 +437,8 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
     ? (isLight ? '#cccccc' : '#555555')
     : (isLight ? '#000000' : '#080808')
   const windowColor = isActive
-    ? (isLight ? '#aaaaaa' : '#999999')
-    : (isLight ? '#909090' : '#222222')
+    ? (isLight ? '#aaaaaa' : '#59559')
+    : (isLight ? '#909090' : '#000')
   const windowEmissive = isActive
     ? (isLight ? '#999999' : '#888888')
     : (isLight ? '#666666' : '#0e0e0e')
@@ -445,7 +454,14 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
         <meshStandardMaterial
           color={bodyColor}
           emissive={bodyEmissive}
-          emissiveIntensity={isActive ? 0.4 : 0}
+          emissiveIntensity={isActive ? 0.1 : 0}
+          map={texture[0]}  // colorMap
+          normalMap={texture[1]}  // normalMap
+          roughnessMap={texture[2]}  // roughnessMap
+          displacementMap={texture[3]}  // displacementMap
+          displacementScale={-0.01}  // Adjust for subtle surface depth
+          roughness={0.9}
+          metalness={0.03}
         />
       </mesh>
 
@@ -455,10 +471,10 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
           {/* Main overhead light */}
           <pointLight
             position={[0, height + 3, 0]}
-            color={isLight ? '#e0e0e0' : '#bbbbbb'}
-            intensity={isLight ? 3 : 5}
-            distance={height * 3}
-            decay={2}
+            color={isLight ? '#e0e0e0' : '#9b9b9b'}
+            intensity={isLight ? 3 : 0.9}
+            // distance={height * 3}
+            // decay={2}
             castShadow={enableShadows}
             shadow-mapSize-width={512}
             shadow-mapSize-height={512}
@@ -474,8 +490,8 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
         <mesh key={`w-${i}`} position={win.pos} rotation={win.rot} geometry={sharedWindowGeo} scale={[windowWidth, windowHeight, 1]} receiveShadow>
           {isActive ? (
             /* Lit windows — unlit material so they glow uniformly like real interior light */
-            <meshBasicMaterial
-              color={isLight ? '##fff' : '#fafafa'}
+            <meshStandardMaterial
+              color={isLight ? '##fff' : '#aaa'}
               toneMapped={false}
             />
           ) : (
@@ -491,15 +507,15 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
       {/* Single window-spill light when active */}
       {isActive && (
         <pointLight
-          position={[(x > 0 ? -1 : 1) * (width / 2 + 1), height * 0.5, 0]}
+          position={[(x > 0 ? -1 : 1) * (width / 2 + 3), height * 0.5, 0]}
           color={isLight ? '#cccccc' : '#aaaaaa'}
-          intensity={isLight ? 1.5 : 3}
-          distance={12}
-          decay={2}
+          intensity={isLight ? 20.5 : 100}
+          // distance={12}
+          // decay={2}
           castShadow={enableShadows}
           shadow-mapSize-width={512}
           shadow-mapSize-height={512}
-          shadow-bias={-0.0005}
+          shadow-bias={-0.05}
           shadow-camera-near={0.9}
           shadow-camera-far={12}
         />
@@ -532,7 +548,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
             >
               {String(startYear + floor)}
               {isActive ? (
-                <meshBasicMaterial
+                <meshStandardMaterial
                   color={isLight ? '#e8e8e8' : '#c0c0c0'}
                   toneMapped={false}
                 />
@@ -564,8 +580,9 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     }
 
     // Build exclusion zones around experience buildings so background buildings don't overlap them
-    const EXP_W = 5
-    const EXP_D = 5
+    // Keep zones tight so the gap beside each experience building isn't too wide
+    const EXP_W = 0
+    const EXP_D = 0
     const MARGIN = 0.01 // minimum gap between any two buildings
     const expZones = experiences.map((exp, index) => {
       const side = index % 2 === 0 ? 1 : -1
@@ -585,14 +602,6 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       // Corridor from road toward the pyramids (right side, +X) — wider to match pushed-back pyramids
       { x: 50, z: pyramidZ, hw: 18, hd: 25 },
     )
-    if (experiences[4]) {
-      const towerZ = experiences[4].position * roadLength - 18
-      // Corridor from road toward the TV tower (right side, +X)
-      // Wide corridor so buildings don't block the sightline
-      expZones.push(
-        { x: 30, z: towerZ, hw: 12, hd: 12 },
-      )
-    }
 
     // AABB overlap check with margin in the XZ plane
     const overlaps = (cx: number, cz: number, hw: number, hd: number) => {
@@ -620,36 +629,26 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     }
 
     // Row definitions: multiple rows create a dense cityscape
-    // Each row has its own X band so they don't compete for the same space
+    // Each row has its own X band; even xMin/xRange spacing for consistent distribution
     const bCount = perf.buildingCount
+    const baseX = ROAD_WIDTH / 2 + SIDE_OFFSET
     const rows = [
+      // Fill row: small buildings close to road to reduce gap beside experience buildings
+      { count: bCount, xMin: baseX + 2, xRange: 4, wMin: 2, wRange: 2, dMin: 2, dRange: 2, hMin: 2, hRange: 6, seedOffset: 300, zJitter: 1.5 },
       // Front row: close to road, tallest
-      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET, xRange: 5, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 4, hRange: 12, seedOffset: 0, zJitter: 1.5 },
-      // Middle row: behind front
-      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 6, xRange: 4, wMin: 2, wRange: 4, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 5000, zJitter: 2 },
+      { count: bCount, xMin: baseX, xRange: 5, wMin: 5, wRange: 5, dMin: 3, dRange: 5, hMin: 4, hRange: 12, seedOffset: 400, zJitter: 1.5 },
+      // Middle row
+      { count: bCount, xMin: baseX + 5, xRange: 5, wMin: 4, wRange: 5, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 500, zJitter: 2 },
       // Back row: shorter fill
-      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 11, xRange: 4, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 2.5 },
-      // Deep row: more fill far back
-      { count: bCount, xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 16, xRange: 5, wMin: 2, wRange: 3, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 3 },
-      // Skyline row: distant tall silhouettes for city skyline effect
-      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 22, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
-      
-      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 30, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
-      
-      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 50, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
-      { count: Math.floor(bCount * 0.6), xMin: ROAD_WIDTH / 2 + SIDE_OFFSET + 200, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 14, seedOffset: 20000, zJitter: 3.5 },
+      { count: bCount, xMin: baseX + 11, xRange: 5, wMin: 3, wRange: 5, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 2.5 },
+      // Deep row
+      { count: bCount, xMin: baseX + 17, xRange: 5, wMin: 3, wRange: 4, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 2.5 },
+      // Skyline row: distant tall silhouettes
+      { count: Math.floor(bCount * 0.6), xMin: baseX + 24, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 9, seedOffset: 20000, zJitter: 3 },
+      // Far skyline row
+      { count: Math.floor(bCount * 0.6), xMin: baseX + 38, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 9, seedOffset: 25000, zJitter: 3 },
     ]
 
-    // Only cap heights near experience buildings that have landmarks behind them
-    // (1st = pyramids, 5th = TV tower). Others can have tall buildings.
-    const landmarkIndices = [0, 4]
-    const heightCapZones = landmarkIndices
-      .filter((idx) => experiences[idx])
-      .map((idx) => ({
-        z: experiences[idx].position * roadLength,
-        radius: 12,
-        maxH: 8,
-      }))
 
     for (const row of rows) {
       for (let i = 0; i < row.count * 2; i++) {
@@ -667,13 +666,6 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
           const x = side * (row.xMin + rand(ri + 1 + rSeed) * row.xRange)
           const z = 2 + idx * (roadLength / row.count) + rand(ri + 2 + rSeed) * row.zJitter
 
-          // Cap height near experience buildings so landmarks stay visible
-          h = row.hMin + rand(ri + 4) * row.hRange
-          for (const cap of heightCapZones) {
-            if (Math.abs(z - cap.z) < cap.radius) {
-              h = Math.min(h, cap.maxH)
-            }
-          }
 
           if (!overlaps(x, z, w / 2, d / 2)) {
             positions.push([x, h / 2, z])
@@ -729,9 +721,28 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     return { positions, scales, ledgeInstances, windowInstances }
   }, [roadLength, experiences, perf.buildingCount])
 
+  const texture = useTexture([
+    '/textures/painted_plaster_wall_diff_1k.jpg',
+    '/textures/painted_plaster_wall_nor_gl_1k.jpg',    // After conversion
+    '/textures/painted_plaster_wall_rough_1k.jpg',     // After conversion
+    '/textures/painted_plaster_wall_disp_1k.png'
+  ])
+  texture.forEach(texture => {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+    texture.repeat.set(20, 20)
+  })
   const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
   const material = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#2a2a2a' }),
+    () => new THREE.MeshStandardMaterial({ 
+      color:"#e0e0e0",
+      map: texture[0],  // colorMap
+      normalMap: texture[1],  // normalMap
+      roughnessMap: texture[2],  // roughnessMap
+      displacementMap: texture[3],  // displacementMap
+      displacementScale: -0.01,  // Adjust for subtle surface depth
+      roughness: 0.9,
+      metalness: 0.05
+    }),
     []
   )
 
@@ -747,7 +758,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
   const windowMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#1a1a1a',
+        color: isLight ? '#909090' : '#000',
         emissive: '#0a0a0a',
         emissiveIntensity: 0.2,
       }),
@@ -759,8 +770,8 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     material.needsUpdate = true
     ledgeMaterial.color.set(isLight ? '#d8d8d8' : '#303030')
     ledgeMaterial.needsUpdate = true
-    windowMaterial.color.set(isLight ? '#888888' : '#252525')
-    windowMaterial.emissive.set(isLight ? '#666666' : '#121212')
+    // windowMaterial.color.set(isLight ? '#888888' : '#252525')
+    // windowMaterial.emissive.set(isLight ? '#666666' : '#121212')
     windowMaterial.needsUpdate = true
   }, [isLight, material, ledgeMaterial, windowMaterial])
 
@@ -850,13 +861,13 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
 
   const tickGeometry = useMemo(() => new THREE.PlaneGeometry(tickWidth, 0.06), [])
   const tickMaterial = useMemo(
-    () => new THREE.MeshBasicMaterial({ color: '#444444', transparent: true, opacity: 0.3, depthTest: false }),
+    () => new THREE.MeshStandardMaterial({ color: '#444444', transparent: true, opacity: 0.3, depthTest: false }),
     []
   )
   const tickRef = useRef<THREE.InstancedMesh>(null)
 
   useEffect(() => {
-    tickMaterial.color.set(isLight ? '#666666' : '#444444')
+    tickMaterial.color.set(isLight ? '#161616' : '#444444')
     tickMaterial.needsUpdate = true
   }, [isLight, tickMaterial])
 
@@ -864,7 +875,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     const mesh = tickRef.current
     if (!mesh || timelineTicks.length === 0) return
     for (let i = 0; i < timelineTicks.length; i++) {
-      dummy.position.set(tickX, 0.02, timelineTicks[i])
+      dummy.position.set(tickX, 0.04, timelineTicks[i])
       dummy.rotation.set(-Math.PI / 2, 0, 0)
       dummy.scale.set(1, 1, 1)
       dummy.updateMatrix()
@@ -920,8 +931,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       <group position={[0, 0, experiences[0] ? experiences[0].position * roadLength : 0]}>
         <GizaPyramids theme={theme} />
         {/* Close-range lights on the pyramids — road-facing side (no shadows for perf) */}
-        <pointLight position={[60, 25, 18]} color={isLight ? '#e0e0e0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={60} decay={1.2} />
-        <pointLight position={[50, 20, -6]} color={isLight ? '#d0d0d0' : '#cccccc'} intensity={isLight ? 4 : 15} distance={50} decay={1.2} />
+        <pointLight position={[60, 25, 18]} color={isLight ? '#e0e0e0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={60} castShadow />
       </group>
 
       {/* Berlin TV Tower landmark behind the fifth experience building (Babbel) */}

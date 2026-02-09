@@ -24,7 +24,7 @@ export interface PerfPreset {
   /** Sphere segment count for celestial body */
   celestialSegments: number
   /** Enable shadows on the renderer */
-  enableShadows: boolean
+  enableShadows: boolean | "soft" | "basic" | "percentage" | "variance"
   /** Antialias */
   antialias: boolean
   /** Canvas performance.min (adaptive DPR) */
@@ -51,11 +51,11 @@ const MEDIUM: PerfPreset = {
   dpr: [1, 1.5],
   shadowMapSize: 256,
   buildingShadows: true,
-  ssaoSamples: 4,
+  ssaoSamples: 50,
   enableBloom: true,
   enableSSAO: true,
   buildingCount: 50,
-  celestialSegments: 12,
+  celestialSegments: 120,
   enableShadows: true,
   antialias: true,
   perfMin: 0.5,
@@ -64,14 +64,14 @@ const MEDIUM: PerfPreset = {
 const HIGH: PerfPreset = {
   tier: 'high',
   dpr: [1, 2],
-  shadowMapSize: 256,
+  shadowMapSize: 1024,
   buildingShadows: true,
-  ssaoSamples: 6,
+  ssaoSamples: 100,
   enableBloom: true,
   enableSSAO: true,
-  buildingCount: 100,
-  celestialSegments: 16,
-  enableShadows: true,
+  buildingCount: 150,
+  celestialSegments: 200,
+  enableShadows: "soft",
   antialias: true,
   perfMin: 0.5,
 }

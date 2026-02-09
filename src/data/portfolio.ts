@@ -56,7 +56,7 @@ export const portfolioProjects: PortfolioProject[] = [
       'Optimized platform serving 10M+ user profiles and 1M+ active users, improving response times by 35% through efficient query restructuring.',
     tags: ['TypeScript', 'AWS', 'Performance'],
     thumbnail: '/portfolio/amazon.png',
-    link: 'https://www.amazon.compass.com',
+    link: 'https://compass.amazon.com/',
     size: 'medium',
   },
   {

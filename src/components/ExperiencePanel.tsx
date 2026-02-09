@@ -19,70 +19,72 @@ export function ExperiencePanel({ experience, side }: ExperiencePanelProps) {
           initial={{ x: slideFrom, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: slideFrom, opacity: 0 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
+          transition={{ 
+            duration: 0.5, 
+            ease: [0.25, 0.1, 0.25, 1], // cubic-bezier for smoother motion
+            opacity: { duration: 0.4 } // Slightly faster opacity for better perceived performance
+          }}
+          // Prevent layout shifts and force GPU acceleration
+          style={{ 
+            willChange: 'transform, opacity',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+          }}
         >
           <div className="experience-panel-content">
             <motion.h2
               className="experience-panel-title"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05, duration: 0.25 }}
+              transition={{ 
+                delay: 0.1, 
+                duration: 0.35,
+                ease: [0.25, 0.1, 0.25, 1]
+              }}
             >
               {experience.title}
             </motion.h2>
-            {experience.company && (
-              <motion.p
-                className="experience-panel-company"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.08, duration: 0.25 }}
-              >
-                {experience.company}
-              </motion.p>
-            )}
-            <motion.p
-              className="experience-panel-period"
+            <motion.div
+              className="experience-panel-cards"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.25 }}
+              transition={{ 
+                delay: 0.2, 
+                duration: 0.35,
+                ease: [0.25, 0.1, 0.25, 1]
+              }}
             >
-              {experience.period}
-            </motion.p>
-            <motion.p
-              className="experience-panel-description"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.12, duration: 0.25 }}
-            >
-              {experience.description}
-            </motion.p>
-            {experience.tags && experience.tags.length > 0 && (
-              <motion.div
-                className="experience-panel-tags"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, duration: 0.25 }}
-              >
-                {experience.tags.map((tag) => (
-                  <span key={tag} className="experience-panel-tag">
-                    {tag}
-                  </span>
-                ))}
-              </motion.div>
-            )}
-            {experience.link && (
-              <motion.a
-                href={experience.link}
-                target="_blank"
-                rel="noreferrer"
-                className="experience-panel-link"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.18, duration: 0.25 }}
-              >
-                Learn more →
-              </motion.a>
-            )}
+              {experience.company && (
+                <p className="experience-panel-company">
+                  {experience.company}
+                </p>
+              )}
+              <p className="experience-panel-period">
+                {experience.period}
+              </p>
+              <p className="experience-panel-description">
+                {experience.description}
+              </p>
+              {experience.tags && experience.tags.length > 0 && (
+                <div className="experience-panel-tags">
+                  {experience.tags.map((tag) => (
+                    <span key={tag} className="experience-panel-tag">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {experience.link && (
+                <a
+                  href={experience.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="experience-panel-link"
+                >
+                  Learn more →
+                </a>
+              )}
+            </motion.div>
           </div>
         </motion.aside>
       ) : null}

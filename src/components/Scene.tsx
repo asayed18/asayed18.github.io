@@ -1,4 +1,4 @@
-import { useRef, useCallback, useMemo, useEffect } from 'react'
+import { useRef, useCallback, useMemo, useEffect, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { EffectComposer, SSAO, Noise, Vignette, Bloom } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
@@ -9,6 +9,8 @@ import type { Theme } from '../App'
 import type { PerfPreset } from '../utils/devicePerf'
 import { Road } from './Road'
 import { Buildings } from './Buildings'
+import { useHelper } from '@react-three/drei'
+import { PointLightHelper } from 'three'
 
 /* ── Gradient sky dome ── */
 function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
@@ -164,17 +166,18 @@ function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; segments?
         color={isLight ? '#ffffff' : '#cccccc'}
         intensity={isLight ? 3.5 : 1.8}
         distance={250}
-        decay={1}
+        // decay={1}
+        castShadow
       />
       {/* Glowing sphere */}
       <mesh ref={flareHost}>
         <sphereGeometry args={[bodyRadius, segments, segments]} />
-        <meshBasicMaterial color={isLight ? '#ffffff' : '#e8ecf4'} toneMapped={false} />
+        <meshStandardMaterial color={isLight ? '#ffffff' : '#e8ecf4'} toneMapped={false} />
       </mesh>
       {/* Inner glow halo */}
       <mesh>
         <sphereGeometry args={[bodyRadius * 1.4, segments, segments]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={isLight ? '#fffae8' : '#c8d4e4'}
           transparent
           opacity={isLight ? 0.3 : 0.15}
@@ -185,7 +188,7 @@ function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; segments?
       {/* Outer glow halo */}
       <mesh>
         <sphereGeometry args={[bodyRadius * 2.2, segments, segments]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={isLight ? '#fff0d0' : '#a0b0c8'}
           transparent
           opacity={isLight ? 0.12 : 0.06}
@@ -198,15 +201,15 @@ function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; segments?
         <>
           <mesh position={[-0.5, 0.6, 2]}>
             <sphereGeometry args={[0.4, 8, 8]} />
-            <meshBasicMaterial color="#b8bcc8" toneMapped={false} />
+            <meshStandardMaterial color="#b8bcc8" toneMapped={false} />
           </mesh>
           <mesh position={[0.8, -0.3, 1.8]}>
             <sphereGeometry args={[0.3, 8, 8]} />
-            <meshBasicMaterial color="#b0b4c0" toneMapped={false} />
+            <meshStandardMaterial color="#b0b4c0" toneMapped={false} />
           </mesh>
           <mesh position={[-0.2, -0.7, 2]}>
             <sphereGeometry args={[0.25, 8, 8]} />
-            <meshBasicMaterial color="#aeb2be" toneMapped={false} />
+            <meshStandardMaterial color="#aeb2be" toneMapped={false} />
           </mesh>
         </>
       )}
@@ -214,11 +217,33 @@ function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; segments?
   )
 }
 
-const ROAD_LENGTH = 200
-const CAMERA_HEIGHT = 3
-const LOOK_AHEAD = 25
+const ROAD_LENGTH = 250
+const CAMERA_HEIGHT = 8
+const LOOK_AHEAD = 45
 const ROAD_WIDTH = 10
 const SIDE_OFFSET = 8
+
+/* ── Moon-like light at end of road, in line with road surface (horizon) ── */
+const END_LIGHT_HEIGHT = 45
+
+function EndOfRoadLight({ theme, segments = 12 }: { theme: 'light' | 'dark'; segments?: number }) {
+  const position: [number, number, number] = [-20, END_LIGHT_HEIGHT, ROAD_LENGTH]
+  const lightRef = useRef<THREE.PointLight>(null)
+  useHelper(lightRef as MutableRefObject<THREE.Object3D>, PointLightHelper, 1, 'red')
+
+  return (
+    <group position={position}>
+      <pointLight
+        // ref={lightRef}
+        color={theme === 'light' ? '#e0e4ec' : '#b8c0d0'}
+        intensity={theme === 'light' ? 5000 : 5000}
+        castShadow
+        // distance={400}
+        // decay={9}
+      />
+    </group>
+  )
+}
 
 const MONTH_MAP: Record<string, number> = {
   Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
@@ -316,7 +341,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   })
 
   // Cache vFov since it won't change
-  const vFov = useMemo(() => THREE.MathUtils.degToRad(75), [])
+  const vFov = useMemo(() => THREE.MathUtils.degToRad(95), [])
 
   useFrame((_, delta) => {
     const activeData = activeExperienceId ? expLookup.get(activeExperienceId) : null
@@ -331,20 +356,23 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
       const side = buildingIndex % 2 === 0 ? 1 : -1
       const buildingX = side * (ROAD_WIDTH / 2 + SIDE_OFFSET)
 
-      const LOGO_OFFSET = 1.5
-      const LOGO_SIGN_HEIGHT_ESTIMATE = 2
+      const LOGO_OFFSET = 6
+      const LOGO_SIGN_HEIGHT_ESTIMATE = 3
       const totalHeight = buildingHeight + LOGO_OFFSET + LOGO_SIGN_HEIGHT_ESTIMATE
       const lookAtY = totalHeight / 2
 
-      _targetLookAt.current.set(buildingX, lookAtY, buildingZ)
+      // Focus on a point beside the building (shifted outward) so the building is off-center in frame
+      const LOOK_AT_SIDE_OFFSET = -6
+      const lookAtX = buildingX + side * LOOK_AT_SIDE_OFFSET
+      _targetLookAt.current.set(lookAtX, lookAtY, buildingZ)
       smoothLookAt.current.lerp(_targetLookAt.current, Math.min(delta * 2, 1))
 
-      const margin = 1.3
+      const margin = 0.7
       const requiredDist = (totalHeight * margin) / (2 * Math.tan(vFov / 2))
 
-      const cameraOffsetX = side * -(requiredDist * 0.55)
-      const cameraOffsetZ = -(requiredDist * 0.85)
-      const cameraOffsetY = lookAtY + requiredDist * 0.15
+      const cameraOffsetX = side * -(requiredDist * 0.45)
+      const cameraOffsetZ = -(requiredDist * 0.95)
+      const cameraOffsetY = lookAtY + requiredDist * 0.09
       _targetCameraPos.current.set(cameraOffsetX, cameraOffsetY, buildingZ + cameraOffsetZ)
       // Lerp from the camera's actual current position — NOT the road position.
       _currentCameraPos.current.copy(camera.position)
@@ -363,9 +391,10 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
   return (
     <>
       {theme === 'dark' ? <SkyGradient theme={theme} /> : <color attach="background" args={['#f5f5f5']} />}
-      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.015 : 0.020]} />
+      <fog attach="fog" args={[colors.fog, 100, 1000]} />
+      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.014 : 0.027]} />
       {/* Ambient fill */}
-      <ambientLight intensity={theme === 'light' ? 0.2 : 0.05} />
+      <ambientLight intensity={theme === 'light' ? 0.2 : 0.5} />
       {/* Primary directional light aligned with sun/moon direction */}
       <directionalLight
         position={theme === 'light' ? [15, 70, 10] : [-12, 65, 8]}
@@ -387,10 +416,13 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
       <directionalLight
         position={theme === 'light' ? [-10, 15, -5] : [10, 15, -5]}
         intensity={theme === 'light' ? 0.55 : 0.4}
+        castShadow
       />
       {/* Sun / Moon with lens flare */}
       <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />
       <Road length={ROAD_LENGTH} theme={theme} />
+      {/* Moon-like light at end of road, in line with road surface */}
+      <EndOfRoadLight theme={theme} segments={perf.celestialSegments} />
       <Buildings
         roadLength={ROAD_LENGTH}
         experiences={experiences}
@@ -405,7 +437,7 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
             blendFunction={BlendFunction.MULTIPLY}
             samples={perf.ssaoSamples}
             radius={0.9}
-            intensity={90}
+            intensity={40}
             luminanceInfluence={0.9}
             worldDistanceThreshold={12}
             worldDistanceFalloff={3}
@@ -415,21 +447,21 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
         ) : <></>}
         {perf.enableBloom ? (
           <Bloom
-            intensity={theme === 'light' ? 0.4 : 0.7}
+            intensity={theme === 'light' ? 0.2 : 0.9}
             luminanceThreshold={theme === 'light' ? 0.6 : 0.35}
             luminanceSmoothing={0.3}
             mipmapBlur
           />
         ) : <></>}
         <Vignette
-          offset={theme === 'light' ? 0.45 : 0.25}
+          offset={theme === 'light' ? 0.40 : 0.35}
           darkness={theme === 'light' ? 0.45 : 0.5}
           blendFunction={BlendFunction.NORMAL}
         />
-        <Noise
-          blendFunction={BlendFunction.SOFT_LIGHT}
-          opacity={perf.tier === 'low' ? 0.05 : (theme === 'light' ? 0.15 : 0.18)}
-        />
+        {/* <Noise
+          blendFunction={BlendFunction.ALPHA}
+          opacity={perf.tier === 'low' ? 0.05 : (theme === 'light' ? 0.005 : 0.01)}
+        /> */}
       </EffectComposer>
     </>
   )

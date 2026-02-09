@@ -11,6 +11,7 @@ interface PortfolioSectionProps {
 
 export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
   const [fireworksPlaying, setFireworksPlaying] = useState(false)
+  const lastTouchY = useRef(0)
   const fireworksTriggered = useRef(false)
 
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -51,8 +52,41 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
         e.preventDefault()
       }
     }
+    const handleTouchStart = (e: TouchEvent) => {
+      lastTouchY.current = e.touches[0].pageY
+    }
+    const handleTouchMove = (e: TouchEvent) => {
+      if (fireworksRef.current) {
+        e.preventDefault()
+        return
+      }
+      const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+      if (!scrollContainer) return
+
+      const currentY = e.touches[0].pageY
+      const deltaY = lastTouchY.current - currentY
+      lastTouchY.current = currentY
+
+      if (progressRef.current < 1) {
+        el.scrollTop = 0
+        scrollContainer.scrollBy({ top: deltaY, behavior: 'auto' })
+        e.preventDefault()
+        return
+      }
+      if (deltaY < 0 && el.scrollTop <= 0) {
+        scrollContainer.scrollBy({ top: deltaY, behavior: 'auto' })
+        e.preventDefault()
+      }
+    }
     el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    el.addEventListener('touchmove', handleTouchMove, { passive: false })
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel)
+      el.removeEventListener('touchstart', handleTouchStart)
+      el.removeEventListener('touchmove', handleTouchMove)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress > 0]) // re-run when overlay mounts/unmounts; refs keep other values fresh
 
@@ -72,42 +106,42 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
   }, [progress > 0])
 
   // Freeze scrolling while fireworks play
-  useEffect(() => {
-    if (ctaVisible && !fireworksTriggered.current) {
-      fireworksTriggered.current = true
-      setFireworksPlaying(true)
-      const timer = setTimeout(() => setFireworksPlaying(false), FIREWORKS_DURATION)
-      return () => clearTimeout(timer)
-    }
-    if (!ctaVisible) {
-      fireworksTriggered.current = false
-    }
-  }, [ctaVisible])
+  // useEffect(() => {
+  //   if (ctaVisible && !fireworksTriggered.current) {
+  //     fireworksTriggered.current = true
+  //     setFireworksPlaying(true)
+  //     const timer = setTimeout(() => setFireworksPlaying(false), FIREWORKS_DURATION)
+  //     return () => clearTimeout(timer)
+  //   }
+  //   if (!ctaVisible) {
+  //     fireworksTriggered.current = false
+  //   }
+  // }, [ctaVisible])
 
   if (progress <= 0) return null
 
   const ease = progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2
-  const opacity = ease
 
   return (
     <div
       ref={overlayRef}
       className="portfolio-overlay"
       style={{
-        opacity,
         pointerEvents: progress > 0.3 ? 'auto' : 'none',
       }}
     >
       <div className="portfolio-backdrop" />
 
-      {/* Large centered title – fades in, holds, then fades out */}
-      {ease < 0.5 && (
+      {/* Large centered title – fades in, holds longer, then fades out */}
+      {ease < 0.88 && (
         <div
           className="portfolio-hero-title"
           style={{
-            opacity: ease < 0.15
+            opacity: ease < 0.12
               ? Math.min(ease / 0.12, 1)
-              : Math.max(1 - (ease - 0.2) / 0.2, 0),
+              : ease < 0.38
+                ? 1
+                : Math.max(1 - (ease - 0.38) / 0.01, 0),
             transform: `scale(${1 + (1 - Math.min(ease / 0.12, 1)) * 0.1})`,
           }}
         >
@@ -129,7 +163,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
         <div className="portfolio-grid">
           {portfolioProjects.map((project, i) => {
             const gridEase = Math.max(ease - 0.55, 0) / 0.45
-            const cardDelay = i * 0.1
+            const cardDelay = i * 0.03
             const cardProgress = Math.max(Math.min((gridEase - cardDelay) / (1 - cardDelay), 1), 0)
             const cardEase = cardProgress < 0.5
               ? 2 * cardProgress * cardProgress
@@ -146,7 +180,6 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
                 {...wrapperProps}
                 className={`portfolio-card portfolio-card--${project.size}`}
                 style={{
-                  opacity: cardEase,
                   transform: `translateY(${(1 - cardEase) * 30}px)`,
                 }}
               >

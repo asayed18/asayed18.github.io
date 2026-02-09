@@ -160,9 +160,9 @@ function App() {
       </div>
       <div className="canvas-wrapper">
         <Canvas
-          gl={{ antialias: perf.antialias, alpha: false, powerPreference: 'high-performance' }}
+          gl={{ antialias: perf.antialias, alpha: true, powerPreference: 'high-performance' }}
           shadows={perf.enableShadows}
-          camera={{ position: [0, 3, 0], fov: 60 }}
+          camera={{ position: [0, 3, 0], fov: 80 }}
           dpr={perf.dpr}
           performance={{ min: perf.perfMin }}
         >
