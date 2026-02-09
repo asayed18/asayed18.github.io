@@ -88,7 +88,7 @@ export function HeroOverlay({ scrollProgress, theme, onToggleTheme, sceneReady }
 
         <div className="hero-text">
           <h1 className="hero-name">Ahmed Sayed</h1>
-          <p className="hero-title">Senior Software Engineer @ Forgent AI</p>
+          <p className="hero-title">Software Engineer | AI Enthusiast | ex-Amazon | ex-Huawei</p>
         </div>
 
         <nav

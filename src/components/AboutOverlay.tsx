@@ -26,7 +26,7 @@ export function AboutOverlay({ open, onClose }: AboutOverlayProps) {
 
         <p className="about-bio">
           I am a Senior Software Engineer with over 10 years of experience in
-          full-stack development, currently working at Forgent AI. I specialize
+          full-stack development. I specialize
           in backend-heavy solutions, scalable distributed architectures, and
           modern web technologies. I enjoy tackling complex engineering
           challenges and building high-impact systems that drive real business
@@ -35,8 +35,7 @@ export function AboutOverlay({ open, onClose }: AboutOverlayProps) {
 
         <ul className="about-facts">
           <li>Based in Berlin, Germany</li>
-          <li>Currently working at Forgent AI</li>
-          <li>Learning Rust and exploring AI-driven systems</li>
+          <li>diving into Rust and exploring AI-driven systems</li>
           <li>Ask me about TypeScript, Python, AWS, and scalable system design</li>
           <li>Fun fact: I love hiking and exploring new cuisines</li>
         </ul>
