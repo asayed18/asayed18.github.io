@@ -11,7 +11,15 @@ interface HeaderProps {
   onNavigateHome?: () => void
 }
 
-export function Header({ theme, onToggleTheme, showAvatar, avatarProgress, onNavigatePortfolio, onOpenAbout, onNavigateHome }: HeaderProps) {
+export function Header({
+  theme,
+  onToggleTheme,
+  showAvatar,
+  avatarProgress,
+  onNavigatePortfolio,
+  onOpenAbout,
+  onNavigateHome,
+}: HeaderProps) {
   // Avatar entrance: starts larger and offset from below-center
   // (continuing the hero's flight path from center toward top-left)
   const ap = Math.min(Math.max(avatarProgress, 0), 1)
@@ -66,7 +74,8 @@ export function Header({ theme, onToggleTheme, showAvatar, avatarProgress, onNav
           Portfolio
         </a>
       </nav>
-      <button type="button" className="theme-toggle" aria-label="Toggle theme" onClick={onToggleTheme}>
+      <div className="header-actions">
+        <button type="button" className="theme-toggle" aria-label="Toggle theme" onClick={onToggleTheme}>
         <span className="theme-icon">
           {theme === 'dark' ? (
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -74,7 +83,8 @@ export function Header({ theme, onToggleTheme, showAvatar, avatarProgress, onNav
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
           )}
         </span>
-      </button>
+        </button>
+      </div>
     </header>
   )
 }

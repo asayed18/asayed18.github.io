@@ -1,0 +1,17 @@
+---
+description: Core standards for this Three.js personal site (Vite, React, R3F)
+alwaysApply: true
+---
+
+# Three.js Project Standards
+
+- Use TypeScript, ES modules, and named exports; avoid default exports for components.
+- Structure: `src/three/` for scene setup/materials/shaders/loaders; `src/components/` for UI/overlays; `src/hooks/` for state/responsiveness; `public/assets/` for textures/models.
+- Performance defaults: cap DPR (e.g., `Math.min(devicePixelRatio, 1.5)`), reuse geometries/materials, dispose on unmount, DRACO for glTF and KTX2 for textures, throttle resize, avoid per-frame allocations.
+- Responsiveness: centralize resize logic (hook), prefer CSS for layout, feature-detect WebGL2 and provide reduced-quality fallback when unavailable.
+- Accessibility: ensure keyboard path to CTAs/menus outside the canvas; add ARIA labels for overlays; honor `prefers-reduced-motion` and reduce animation intensity accordingly.
+- Shaders: keep shared uniforms/utilities in `src/three/shaders/common`; document uniforms and avoid magic numbers; name files `*.vert`/`*.frag`.
+- State and render loop: keep transient frame data in refs, not global stores; keep render-loop work minimal; debounce expensive updates.
+- Logging: no `console.log` in production builds—gate behind an env-driven debug flag.
+- Assets: track large binaries via Git LFS; keep source `.blend`/`.psd` out of repo; document asset licenses.
+- Testing/verification: snapshot renderer/camera defaults (fov, near/far, tonemapping); check that loader URLs exist; run `npm run lint`, `npm run build`, and `npm run typecheck` before ship.

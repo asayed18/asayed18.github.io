@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { experiences, TOTAL_SCROLL_HEIGHT_VH } from './data/experiences'
 import { useScrollToDistance } from './hooks/useScrollToDistance'
-import { Scene } from './components/Scene'
+import { Scene } from './three/Scene'
 import { getPerf } from './utils/devicePerf'
 import { ExperiencePanel } from './components/ExperiencePanel'
 import { Header } from './components/Header'
@@ -34,6 +34,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>(
     () => window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
   )
+
   const toggleTheme = useCallback(() => {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
   }, [])
@@ -160,22 +161,31 @@ function App() {
       </div>
       <div className="canvas-wrapper">
         <Canvas
-          gl={{ antialias: perf.antialias, alpha: true, powerPreference: 'high-performance' }}
-          shadows={perf.enableShadows}
-          camera={{ position: [0, 3, 0], fov: 80 }}
-          dpr={perf.dpr}
-          performance={{ min: perf.perfMin }}
-        >
-          <Scene
-            scrollProgress={scrollProgress}
-            experiences={experiences}
-            activeExperienceId={activeExperienceId}
-            theme={theme}
-            perf={perf}
-            onReady={() => setSceneReady(true)}
-          />
-        </Canvas>
-      </div>
+            gl={{
+              antialias: perf.antialias,
+              alpha: true,
+              powerPreference: 'high-performance',
+              // Force WebGL context: don't fail when the browser would report a performance caveat (e.g. software renderer)
+              failIfMajorPerformanceCaveat: false,
+              depth: true,
+              stencil: false,
+              preserveDrawingBuffer: false,
+            }}
+            shadows={perf.enableShadows}
+            camera={{ position: [0, 3, 0], fov: 80 }}
+            dpr={perf.dpr}
+            performance={{ min: perf.perfMin }}
+          >
+            <Scene
+              scrollProgress={scrollProgress}
+              experiences={experiences}
+              activeExperienceId={activeExperienceId}
+              theme={theme}
+              perf={perf}
+              onReady={() => setSceneReady(true)}
+            />
+          </Canvas>
+        </div>
 
       {/* Hero overlay – visible until the user starts scrolling */}
       <HeroOverlay scrollProgress={scrollProgress} theme={theme} onToggleTheme={toggleTheme} sceneReady={sceneReady} />

@@ -77,6 +77,29 @@
   align-items: center;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.beta-toggle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.beta-toggle--on {
+  background: linear-gradient(135deg, #a0a0a0, #707070);
+  color: #0d0d0d;
+  border-color: transparent;
+}
+
 /* ── Mobile responsive ── */
 @media (max-width: 768px) {
   .header {

@@ -29,6 +29,8 @@ export interface PerfPreset {
   antialias: boolean
   /** Canvas performance.min (adaptive DPR) */
   perfMin: number
+  /** Enable screen-space reflections (SSR) */
+  enableSSR?: boolean
 }
 
 const LOW: PerfPreset = {
@@ -44,21 +46,23 @@ const LOW: PerfPreset = {
   enableShadows: false,
   antialias: false,
   perfMin: 0.3,
+  enableSSR: false,
 }
 
 const MEDIUM: PerfPreset = {
   tier: 'medium',
   dpr: [1, 1.5],
-  shadowMapSize: 256,
+  shadowMapSize: 512,
   buildingShadows: true,
-  ssaoSamples: 50,
+  ssaoSamples: 32,
   enableBloom: true,
   enableSSAO: true,
   buildingCount: 50,
-  celestialSegments: 120,
-  enableShadows: true,
+  celestialSegments: 24,
+  enableShadows: 'soft',
   antialias: true,
   perfMin: 0.5,
+  enableSSR: false,
 }
 
 const HIGH: PerfPreset = {
@@ -66,14 +70,15 @@ const HIGH: PerfPreset = {
   dpr: [1, 2],
   shadowMapSize: 1024,
   buildingShadows: true,
-  ssaoSamples: 100,
+  ssaoSamples: 64,
   enableBloom: true,
   enableSSAO: true,
   buildingCount: 150,
-  celestialSegments: 200,
+  celestialSegments: 32,
   enableShadows: "soft",
   antialias: true,
   perfMin: 0.5,
+  enableSSR: true,
 }
 
 function detectTier(): PerfTier {
@@ -82,7 +87,7 @@ function detectTier(): PerfTier {
   // Check for mobile
   const isMobile = /android|iphone|ipad|ipod|mobile/.test(ua)
 
-  // Check GPU via WebGL
+  // Check GPU via WebGL (release context after to avoid "too many contexts")
   let gpuTier: 'low' | 'mid' | 'high' = 'mid'
   try {
     const canvas = document.createElement('canvas')
@@ -91,15 +96,15 @@ function detectTier(): PerfTier {
       const debugInfo = gl.getExtension('WEBGL_debug_renderer_info')
       if (debugInfo) {
         const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL).toLowerCase()
-        // Low-end GPUs
         if (/mali|adreno 3|adreno 4|adreno 5|powervr|intel hd|intel uhd/.test(renderer)) {
           gpuTier = 'low'
         }
-        // High-end GPUs
         if (/nvidia|radeon|apple m|adreno 7|adreno 8/.test(renderer)) {
           gpuTier = 'high'
         }
       }
+      const ext = gl.getExtension('WEBGL_lose_context')
+      if (ext) ext.loseContext()
     }
   } catch {
     // Fallback

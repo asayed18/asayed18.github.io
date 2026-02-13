@@ -1,0 +1,18 @@
+---
+description: Preferred agent workflow, subagents, and commands for this project
+alwaysApply: true
+---
+
+# Agent Workflow and Commands
+
+- Subagents:
+  - `explore` quick → map Three.js entry points (renderer, scene, camera, controls), loaders, shaders.
+  - `explore` very thorough → performance audit (DPR caps, dispose usage, texture loader options, allocations inside render loop).
+  - `generalPurpose` → shader review (dynamic branches, precision, unused uniforms) and architectural questions.
+  - `browser-use` → visual/regression checks, FPS drops, responsive breakpoints; lock/unlock tabs per MCP instructions.
+- Go-to commands (npm):
+  - `npm run dev` for local serve; `npm run preview` for built preview.
+  - `npm run lint`, `npm run typecheck`, `npm run build` (or `npm run build:quick` for Vite-only).
+  - Bundle stats (Vite): `npm run build -- --report`.
+  - Asset prep examples: `npx gltf-pipeline -i model.glb -o model-draco.glb --draco.compressionLevel 10`; `npx ktx2 --input textures/ --output public/assets/ktx2/`.
+- Defaults: prefer TypeScript; keep changes small and tested; avoid destructive git commands; do not commit unless requested.
