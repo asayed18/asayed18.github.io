@@ -488,12 +488,12 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
 
       {Array.from({ length: numFloors }, (_, floor) => {
         const facingRoad = x > 0 ? -1 : 1
-        const labelX = facingRoad * (width / 2 + 0.02)
-        const labelZ = depth / 2 - 1.5
+        const labelX = facingRoad * (width / 2 + 0.03)
+        const labelZ = depth / 2 - 0.9
         const rotY = facingRoad > 0 ? Math.PI / 2 : -Math.PI / 2
 
         return (
-          <group key={`yr-${floor}`} position={[labelX, floor * floorHeight + floorHeight * 0.15, labelZ]}>
+          <group key={`yr-${floor}`} position={[labelX, floor * floorHeight + floorHeight * 0.75, labelZ]}>
             <CanvasText
               position={[0, 0, 0]}
               rotation={[0, rotY, 0]}
@@ -504,6 +504,8 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
               anchorX={facingRoad > 0 ? 'right' : 'left'}
               anchorY="bottom"
               fontWeight="bold"
+              depthTest={false}
+              renderOrder={10}
             >
               {String(startYear + floor)}
             </CanvasText>
