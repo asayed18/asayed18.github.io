@@ -36,8 +36,7 @@ export function AboutOverlay({ open, onClose }: AboutOverlayProps) {
         <ul className="about-facts">
           <li>Based in Berlin, Germany</li>
           <li>diving into Rust and exploring AI-driven systems</li>
-          <li>Ask me about TypeScript, Python, AWS, and scalable system design</li>
-          <li>Fun fact: I love hiking and exploring new cuisines</li>
+          <li>Ask me about #TypeScript #Python #Rust #AWS #SystemDesign</li>
         </ul>
 
         <div className="about-links">
