@@ -10,12 +10,12 @@ import { ROAD_LENGTH } from './config'
 
 const THEME_COLORS = {
   dark: {
-    background: '#1a1a1a',
-    fog: '#1a1a1a',
+    background: '#000000',
+    fog: '#000000',
   },
   light: {
-    background: '#f5f5f5',
-    fog: '#d8d8d8',
+    background: '#ffffff',
+    fog: '#ffffff',
   },
 }
 
@@ -43,15 +43,15 @@ export function Scene({ scrollProgress, experiences, activeExperienceId, theme, 
     <>
       <SkyGradient theme={theme} />
       <fog attach="fog" args={[colors.fog, 100, 1000]} />
-      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.014 : 0.027]} />
+      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.014 : 0.035]} />
 
-      <ambientLight intensity={theme === 'light' ? 0.2 : 0.5} />
+      <ambientLight intensity={theme === 'light' ? 0.3 : 0.02} />
 
       {/* Primary directional light aligned with sun/moon – casts onto road and buildings */}
       <directionalLight
         position={theme === 'light' ? [SUN_OFFSET.x, SUN_OFFSET.y, SUN_OFFSET.z] : [MOON_OFFSET.x, MOON_OFFSET.y, MOON_OFFSET.z]}
-        intensity={theme === 'light' ? 1.65 : 2.1}
-        color={theme === 'light' ? '#ebebeb' : '#d0d0d0'}
+        intensity={theme === 'light' ? 2.5 : 3.5}
+        color={theme === 'light' ? '#ffffff' : '#ffffff'}
         castShadow
         shadow-mapSize-width={perf.shadowMapSize}
         shadow-mapSize-height={perf.shadowMapSize}

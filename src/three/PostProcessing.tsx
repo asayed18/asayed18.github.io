@@ -81,7 +81,7 @@ export function PostProcessing({ theme, perf }: PostProcessingProps) {
         worldProximityFalloff={0.2}
       />
       <Bloom
-        intensity={perf.enableBloom ? (theme === 'light' ? 0.2 : 0.9) : 0}
+        intensity={perf.enableBloom ? (theme === 'light' ? 0.2 : 0.6) : 0}
         luminanceThreshold={theme === 'light' ? 0.6 : 0.35}
         luminanceSmoothing={0.3}
         mipmapBlur

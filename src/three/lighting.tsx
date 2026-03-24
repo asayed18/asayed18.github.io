@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js'
 import { END_LIGHT_HEIGHT, ROAD_LENGTH } from './config'
 
-const MOON_TEXTURE_URL = '/textures/moon.png'
+const MOON_TEXTURE_URL = '/textures/moon.webp'
 
 export const SUN_OFFSET = new THREE.Vector3(12, 52, 28)
 export const MOON_OFFSET = new THREE.Vector3(-10, 42, 32)
@@ -20,10 +20,10 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
     celestialDirRef.current.copy(isLight ? SUN_DIR : MOON_DIR)
     return new THREE.ShaderMaterial({
       uniforms: {
-        topColor: { value: new THREE.Color(isLight ? '#b0b0b0' : '#0d0d0d') },
-        bottomColor: { value: new THREE.Color(isLight ? '#e8e8e8' : '#1a1a1a') },
+        topColor: { value: new THREE.Color(isLight ? '#cccccc' : '#000000') },
+        bottomColor: { value: new THREE.Color(isLight ? '#ffffff' : '#0a0a0a') },
         celestialDir: { value: celestialDirRef.current },
-        moonHighlight: { value: new THREE.Color(isLight ? '#e0e0e0' : '#383838') },
+        moonHighlight: { value: new THREE.Color(isLight ? '#ffffff' : '#444444') },
         iTime: { value: 0 },
         uSphereRadius: { value: 500.0 },
       },
@@ -74,18 +74,22 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
           float t = clamp(h * 0.5 + 0.5, 0.0, 1.0);
           vec3 color = mix(bottomColor, topColor, t);
 
-          float nearRadius = 380.0;
-          float farRadius = 500.0;
-          float tDist = clamp((uSphereRadius - nearRadius) / (farRadius - nearRadius), 0.0, 1.0);
-          float cloudScale = mix(24.0, 7.0, tDist);
-          vec3 uv = n * cloudScale;
-          uv.x += iTime * 0.12;
-          uv.z += iTime * 0.08;
+          // Flat plane projection for true perspective clouds
+          float planeY = 150.0;
+          vec2 planeUV = n.xz * (planeY / max(h, 0.01));
+          
+          float cloudScale = 0.015;
+          vec3 uv = vec3(planeUV * cloudScale, 0.0);
+          uv.x += iTime * 0.08;
+          uv.y += iTime * 0.05;
+          
           float nval = fbmLarge(uv);
-          float cloud = smoothstep(0.42, 0.58, nval);
-          float horizonFade = smoothstep(-0.15, 0.35, h);
+          // Higher thresholds = fewer clouds
+          float cloud = smoothstep(0.52, 0.65, nval);
+          float horizonFade = smoothstep(0.02, 0.35, h); // fade out at horizon to hide infinity point
           cloud *= horizonFade;
-          float cloudSoft = smoothstep(0.38, 0.62, nval) * horizonFade * 0.7;
+          
+          float cloudSoft = smoothstep(0.45, 0.70, nval) * horizonFade * 0.7;
           float cloudMask = cloud * 0.5 + cloudSoft * 0.25;
 
           vec3 cloudColor = color * 1.08;
@@ -107,19 +111,19 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
 
   useEffect(() => {
     const isLight = theme === 'light'
-    material.uniforms.topColor.value.set(isLight ? '#b0b0b0' : '#0d0d0d')
-    material.uniforms.bottomColor.value.set(isLight ? '#e8e8e8' : '#1a1a1a')
+    material.uniforms.topColor.value.set(isLight ? '#cccccc' : '#000000')
+    material.uniforms.bottomColor.value.set(isLight ? '#ffffff' : '#0a0a0a')
     celestialDirRef.current.copy(isLight ? SUN_DIR : MOON_DIR)
     material.uniforms.celestialDir.value.copy(celestialDirRef.current)
-    material.uniforms.moonHighlight.value.set(isLight ? '#e0e0e0' : '#383838')
+    material.uniforms.moonHighlight.value.set(isLight ? '#ffffff' : '#444444')
   }, [theme, material])
 
   const innerMaterial = useMemo(() => {
     const isLight = theme === 'light'
     return new THREE.ShaderMaterial({
       uniforms: {
-        topColor: { value: new THREE.Color(isLight ? '#b0b0b0' : '#0d0d0d') },
-        bottomColor: { value: new THREE.Color(isLight ? '#e8e8e8' : '#1a1a1a') },
+        topColor: { value: new THREE.Color(isLight ? '#cccccc' : '#000000') },
+        bottomColor: { value: new THREE.Color(isLight ? '#ffffff' : '#0a0a0a') },
         iTime: { value: 0 },
       },
       vertexShader: `
@@ -163,16 +167,24 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
           float h = n.y;
           float t = clamp(h * 0.5 + 0.5, 0.0, 1.0);
           vec3 skyColor = mix(bottomColor, topColor, t);
-          float cloudScale = 24.0;
-          vec3 uv = n * cloudScale;
-          uv.x += iTime * 0.12;
-          uv.z += iTime * 0.08;
+
+          // Flat plane projection for inner clouds layer
+          float planeY = 120.0;
+          vec2 planeUV = n.xz * (planeY / max(h, 0.01));
+          
+          float cloudScale = 0.02;
+          vec3 uv = vec3(planeUV * cloudScale, 0.0);
+          uv.x += iTime * 0.06;
+          uv.y += iTime * 0.04;
+          
           float nval = fbmLarge(uv);
-          float cloud = smoothstep(0.42, 0.58, nval);
-          float horizonFade = smoothstep(-0.15, 0.35, h);
+          float cloud = smoothstep(0.55, 0.68, nval);
+          float horizonFade = smoothstep(0.05, 0.35, h);
           cloud *= horizonFade;
-          float cloudSoft = smoothstep(0.38, 0.62, nval) * horizonFade * 0.7;
+          
+          float cloudSoft = smoothstep(0.48, 0.75, nval) * horizonFade * 0.7;
           float cloudMask = (cloud * 0.5 + cloudSoft * 0.25) * 0.65;
+          
           vec3 cloudColor = skyColor * 1.08;
           gl_FragColor = vec4(cloudColor, cloudMask);
           #include <colorspace_fragment>
@@ -259,10 +271,11 @@ function RealisticMoon({ radius, segments }: { radius: number; segments: number 
         <sphereGeometry args={[radius, segments, segments]} />
         <meshStandardMaterial
           map={map}
+          emissiveMap={map}
+          emissive="#ffffff"
+          emissiveIntensity={0.65}
           roughness={0.95}
           metalness={0.02}
-          emissive="#0a0a0a"
-          emissiveIntensity={0.08}
           toneMapped={true}
         />
       </mesh>
@@ -397,7 +410,7 @@ export function EndOfRoadLight({ theme }: { theme: 'light' | 'dark'; segments?: 
   return (
     <group position={position}>
       <pointLight
-        color={theme === 'light' ? '#e0e0e0' : '#b8b8b8'}
+        color={'#ffffff'}
         intensity={theme === 'light' ? 5000 : 5000}
         castShadow
       />

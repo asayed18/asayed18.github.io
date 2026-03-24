@@ -17,10 +17,10 @@ export function Road({ length, theme }: RoadProps) {
   }, [length])
 
   const texture = useTexture([
-    '/textures/Asphalt009_1K-JPG_Color.jpg',
-    '/textures/Asphalt009_1K-JPG_NormalGL.jpg',
-    '/textures/Asphalt009_1K-JPG_Roughness.jpg',
-    '/textures/Asphalt009_1K-JPG_Displacement.jpg',
+    '/textures/Asphalt009_1K-JPG_Color.webp',
+    '/textures/Asphalt009_1K-JPG_NormalGL.webp',
+    '/textures/Asphalt009_1K-JPG_Roughness.webp',
+    '/textures/Asphalt009_1K-JPG_Displacement.webp',
   ])
 
   texture.forEach((tex) => {
@@ -36,9 +36,9 @@ export function Road({ length, theme }: RoadProps) {
         roughnessMap={texture[2]}
         displacementMap={texture[3]}
         displacementScale={-0.05}
-        color={theme === 'light' ? '#d8d8d8' : '#303030'}
+        color={theme === 'light' ? '#ffffff' : '#000000'}
         roughness={theme === 'light' ? 0.8 : 1.95}
-        metalness={theme === 'light' ? 0.15 : 0.15}
+        metalness={theme === 'light' ? 0.05 : 0.15}
       />
     </mesh>
   )

@@ -51,8 +51,8 @@ interface BuildingsProps {
 /* Giza Pyramids landmark (far behind the first experience building) */
 const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const stoneColor = isLight ? '#101010' : '#3a3a3a'
-  const stoneEmissive = isLight ? '#101010' : '#2e2e2e'
+  const stoneColor = isLight ? '#222222' : '#0a0a0a'
+  const stoneEmissive = isLight ? '#111111' : '#050505'
 
   const pyramids: { x: number; z: number; height: number; radius: number }[] = [
     { x: 50, z: -59, height: 20, radius: 20 },
@@ -85,8 +85,8 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
 /* Berlin Fernsehturm (TV Tower) landmark behind the fifth experience */
 const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const towerColor = isLight ? '#555555' : '#404040'
-  const towerEmissive = isLight ? '#303030' : '#252525'
+  const towerColor = isLight ? '#333333' : '#080808'
+  const towerEmissive = isLight ? '#222222' : '#050505'
 
   const shaftHeight = 40
   const shaftRadiusBottom = 2.2
@@ -257,14 +257,6 @@ const Logo3D = memo(function Logo3D({
           />
         </mesh>
 
-        {isActive && (
-          <pointLight
-            color={isLight ? '#cccccc' : '#aaaaaa'}
-            intensity={isLight ? 2 : 4}
-            distance={12}
-            castShadow
-          />
-        )}
       </group>
     </group>
   )
@@ -306,7 +298,7 @@ const RoadDateMarking = memo(function RoadDateMarking({
       <Text
         position={[0, 0, 0]}
         rotation={[-Math.PI / 2, 0, Math.PI]}
-        fontSize={0.55}
+        fontSize={0.9}
         color={isActive ? (isLight ? '#343434' : '#5a5a5a') : (isLight ? '#888888' : '#666666')}
         anchorX="center"
         anchorY="middle"
@@ -326,7 +318,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   startYear,
   isActive,
   isLight,
-  enableShadows = true,
 }: {
   x: number
   width: number
@@ -336,7 +327,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   startYear: number
   isActive: boolean
   isLight: boolean
-  enableShadows?: boolean
 }) {
   const sharedWindowGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
   const sharedLedgeGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
@@ -378,21 +368,21 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   }, [numFloors, floorHeight])
 
   const texture = useTexture([
-    '/textures/painted_plaster_wall_diff_1k.jpg',
-    '/textures/painted_plaster_wall_nor_gl_1k.jpg',
-    '/textures/painted_plaster_wall_rough_1k.jpg',
-    '/textures/painted_plaster_wall_disp_1k.png',
+    '/textures/painted_plaster_wall_diff_1k.webp',
+    '/textures/painted_plaster_wall_nor_gl_1k.webp',
+    '/textures/painted_plaster_wall_rough_1k.webp',
+    '/textures/painted_plaster_wall_disp_1k.webp',
   ])
   texture.forEach((tex) => {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping
     tex.repeat.set(20, 20)
   })
 
-  const bodyColor = isActive ? (isLight ? '#eeeeee' : '#707070') : (isLight ? '#d8d8d8' : '#333333')
-  const bodyEmissive = isActive ? (isLight ? '#cccccc' : '#555555') : (isLight ? '#000000' : '#080808')
-  const windowColor = isActive ? (isLight ? '#aaaaaa' : '#595959') : (isLight ? '#909090' : '#000')
-  const windowEmissive = isActive ? (isLight ? '#999999' : '#888888') : (isLight ? '#666666' : '#0e0e0e')
-  const ledgeColor = isActive ? (isLight ? '#dddddd' : '#666666') : (isLight ? '#cccccc' : '#2a2a2a')
+  const bodyColor = isActive ? (isLight ? '#ffffff' : '#666666') : (isLight ? '#e0e0e0' : '#111111')
+  const bodyEmissive = isActive ? (isLight ? '#dddddd' : '#222222') : (isLight ? '#000000' : '#000000')
+  const windowColor = isActive ? (isLight ? '#888888' : '#ffffff') : (isLight ? '#cccccc' : '#000000')
+  const windowEmissive = isActive ? (isLight ? '#666666' : '#ffffff') : (isLight ? '#999999' : '#000000')
+  const ledgeColor = isActive ? (isLight ? '#eeeeee' : '#050505') : (isLight ? '#cdcdcd' : '#1a1a1a')
 
   return (
     <group position={[x, 0, 0]}>
@@ -411,20 +401,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
           metalness={0.03}
         />
       </mesh>
-
-      {isActive && (
-        <pointLight
-          position={[0, height + 3, 0]}
-          color={isLight ? '#e0e0e0' : '#9b9b9b'}
-          intensity={isLight ? 3 : 0.9}
-          castShadow={enableShadows}
-          shadow-mapSize-width={512}
-          shadow-mapSize-height={512}
-          shadow-bias={-0.0005}
-          shadow-camera-near={0.5}
-          shadow-camera-far={height * 2.5}
-        />
-      )}
 
       {windows.map((win, i) => (
         <mesh
@@ -458,20 +434,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
           )}
         </mesh>
       ))}
-
-      {isActive && (
-        <pointLight
-          position={[(x > 0 ? -1 : 1) * (width / 2 + 3), height * 0.5, 0]}
-          color={isLight ? '#cccccc' : '#aaaaaa'}
-          intensity={isLight ? 20.5 : 100}
-          castShadow={enableShadows}
-          shadow-mapSize-width={512}
-          shadow-mapSize-height={512}
-          shadow-bias={-0.05}
-          shadow-camera-near={0.9}
-          shadow-camera-far={12}
-        />
-      )}
 
       {ledgeYs.map((y, i) => (
         <mesh
@@ -515,6 +477,81 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
     </group>
   )
 })
+
+function ActiveLights({
+  activeExpData,
+  isLight,
+  enableShadows,
+}: {
+  activeExpData: any
+  isLight: boolean
+  enableShadows: boolean
+}) {
+  const groupRef = useRef<THREE.Group>(null)
+  const topLightRef = useRef<THREE.PointLight>(null)
+  const frontLightRef = useRef<THREE.PointLight>(null)
+  const logoLightRef = useRef<THREE.PointLight>(null)
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return
+    const targetX = activeExpData ? activeExpData.x : 0
+    const targetZ = activeExpData ? activeExpData.z : 0
+    
+    // Smooth position interpolation
+    groupRef.current.position.x += (targetX - groupRef.current.position.x) * 5 * delta
+    groupRef.current.position.z += (targetZ - groupRef.current.position.z) * 5 * delta
+
+    // Smooth intensity interpolation
+    const targetIntensityTop = activeExpData ? (isLight ? 3 : 0.9) : 0
+    const targetIntensityFront = activeExpData ? (isLight ? 20.5 : 100) : 0
+    const targetIntensityLogo = activeExpData ? (isLight ? 2 : 4) : 0
+
+    if (topLightRef.current) topLightRef.current.intensity += (targetIntensityTop - topLightRef.current.intensity) * 5 * delta
+    if (frontLightRef.current) frontLightRef.current.intensity += (targetIntensityFront - frontLightRef.current.intensity) * 5 * delta
+    if (logoLightRef.current) logoLightRef.current.intensity += (targetIntensityLogo - logoLightRef.current.intensity) * 5 * delta
+  })
+
+  // Fixed values to avoid erratic shadow/camera updates
+  const height = activeExpData ? activeExpData.buildingHeight : 10
+  const x = activeExpData ? activeExpData.x : 10
+
+  return (
+    <group ref={groupRef}>
+      <pointLight
+        ref={topLightRef}
+        position={[0, height + 3, 0]}
+        color={'#ffffff'}
+        intensity={0}
+        castShadow={enableShadows}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
+        shadow-bias={-0.0005}
+        shadow-camera-near={0.5}
+        shadow-camera-far={25}
+      />
+      <pointLight
+        ref={frontLightRef}
+        position={[(x > 0 ? -1 : 1) * 5.5, height * 0.5, 0]}
+        color={'#ffffff'}
+        intensity={0}
+        castShadow={enableShadows}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
+        shadow-bias={-0.05}
+        shadow-camera-near={0.9}
+        shadow-camera-far={12}
+      />
+      <pointLight
+        ref={logoLightRef}
+        position={[0, height + 1.5, 0]}
+        color={'#ffffff'}
+        intensity={0}
+        distance={12}
+        castShadow
+      />
+    </group>
+  )
+}
 
 export function Buildings({ roadLength, experiences, activeExperienceId, theme, perf, onReady }: BuildingsProps) {
   const isLight = theme === 'light'
@@ -648,10 +685,10 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
   }, [roadLength, experiences, perf.buildingCount])
 
   const texture = useTexture([
-    '/textures/painted_plaster_wall_diff_1k.jpg',
-    '/textures/painted_plaster_wall_nor_gl_1k.jpg',
-    '/textures/painted_plaster_wall_rough_1k.jpg',
-    '/textures/painted_plaster_wall_disp_1k.png',
+    '/textures/painted_plaster_wall_diff_1k.webp',
+    '/textures/painted_plaster_wall_nor_gl_1k.webp',
+    '/textures/painted_plaster_wall_rough_1k.webp',
+    '/textures/painted_plaster_wall_disp_1k.webp',
   ])
   texture.forEach((tex) => {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping
@@ -870,7 +907,6 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
               startYear={startYear}
               isActive={isActive}
               isLight={isLight}
-              enableShadows={perf.buildingShadows}
             />
             {exp.logo && (
               <group position={[x, buildingHeight, 0]}>
@@ -881,6 +917,12 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
           </group>
         )
       })}
+
+      <ActiveLights
+        activeExpData={expRenderData.find((d) => d.exp.id === activeExperienceId)}
+        isLight={isLight}
+        enableShadows={perf.buildingShadows}
+      />
     </group>
   )
 }

@@ -1,32 +1,32 @@
 :root,
 [data-theme="dark"] {
-  --bg: #1a1a1a;
-  --bg-secondary: #2d2d2d;
-  --text: #f0f0f0;
-  --text-muted: #a0a0a0;
-  --road: #252525;
-  --building: #1e1e1e;
-  --building-accent: #3a3a3a;
-  --fog: #1a1a1a;
-  --panel-bg: rgba(10, 10, 10, 0.6);
-  --tag-bg: rgba(255, 255, 255, 0.08);
-  --hero-avatar-border: rgba(255, 255, 255, 0.15);
-  --hero-avatar-shadow: rgba(0, 0, 0, 0.3);
+  --bg: #000000;
+  --bg-secondary: #0a0a0a;
+  --text: #ffffff;
+  --text-muted: #888888;
+  --road: #050505;
+  --building: #0a0a0a;
+  --building-accent: #222222;
+  --fog: #000000;
+  --panel-bg: rgba(0, 0, 0, 0.85);
+  --tag-bg: rgba(255, 255, 255, 0.15);
+  --hero-avatar-border: rgba(255, 255, 255, 0.3);
+  --hero-avatar-shadow: rgba(0, 0, 0, 0.8);
 }
 
 [data-theme="light"] {
-  --bg: #e0e0e0;
-  --bg-secondary: #d0d0d0;
-  --text: #1a1a1a;
+  --bg: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --text: #000000;
   --text-muted: #555555;
-  --road: #b0b0b0;
-  --building: #c8c8c8;
-  --building-accent: #aaaaaa;
-  --fog: #e0e0e0;
-  --panel-bg: rgba(240, 240, 240, 0.65);
+  --road: #eeeeee;
+  --building: #fcfcfc;
+  --building-accent: #e0e0e0;
+  --fog: #ffffff;
+  --panel-bg: rgba(255, 255, 255, 0.85);
   --tag-bg: rgba(0, 0, 0, 0.08);
-  --hero-avatar-border: rgba(0, 0, 0, 0.12);
-  --hero-avatar-shadow: rgba(0, 0, 0, 0.1);
+  --hero-avatar-border: rgba(0, 0, 0, 0.2);
+  --hero-avatar-shadow: rgba(0, 0, 0, 0.15);
 }
 
 * {

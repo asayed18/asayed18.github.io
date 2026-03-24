@@ -17,14 +17,14 @@
 .experience-panel--left {
   left: 0;
   right: auto;
-  justify-content: flex-start;
+  justify-content: center;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .experience-panel--right {
   right: 0;
   left: auto;
-  justify-content: flex-end;
+  justify-content: center;
   border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -33,6 +33,7 @@
   padding: 3rem;
   overflow-y: auto;
   max-height: 80vh;
+  text-align: center;
 }
 
 /* .experience-panel--left .experience-panel-content {
@@ -84,6 +85,7 @@
   flex-wrap: wrap;
   gap: 0.45rem;
   margin-bottom: 1.25rem;
+  justify-content: center;
 }
 
 .experience-panel-tag {
