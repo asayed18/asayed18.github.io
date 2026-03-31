@@ -58,7 +58,7 @@ export const experiences: Experience[] = [
   {
     id: 'babbel',
     position: 0.8,
-    title: 'Technical Team Lead',
+    title: 'Senior Software Engineer',
     description:
       'Leading a cross-functional engineering team delivering high-availability web applications with a focus on scalability and performance. Architected the CRM infrastructure supporting 130M+ client profiles with sub-second query latency. Designed cloud-native microservices on AWS using TypeScript, Python, and Go. Established data governance protocols that improved conversion rates by 22%.',
     period: 'Sep 2022 – Present',
