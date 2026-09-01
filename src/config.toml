@@ -9,7 +9,7 @@ theme = 'hugo-coder'
 [params]
     title = "Ahmed Sayed"
     author = 'Ahmed Sayed'
-    info = 'Senior Software Engineer @ Babbel GmbH'
+    info = 'Senior Software Engineer | 10+ years building scalable systems'
     keywords = "blog,Software,personal"
     license = "MIT"
 
