@@ -2,9 +2,10 @@ import { useMemo, useRef, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Experience } from '../data/experiences'
-import { CAMERA_HEIGHT, LOOK_AHEAD, ROAD_LENGTH, ROAD_WIDTH, EXPERIENCE_SIDE_OFFSET } from './config'
+import { LOOK_AHEAD } from './config'
 import { parsePeriodMonths, monthsToHeight } from './period'
 import { keepRendering, MAX_EASING_STEP } from './pacing'
+import { ROAD_LENGTH, cruisePosition, experiencePose, experienceSide, roadFrame, type CameraPose } from './path'
 
 interface SceneRigInput {
   /**
@@ -20,16 +21,20 @@ interface SceneRigInput {
 const REST_DISTANCE = 0.01
 const REST_DISTANCE_SQ = REST_DISTANCE * REST_DISTANCE
 
+/** Largest turn of the view towards the landmark on a portrait screen. */
+const PORTRAIT_TURN = THREE.MathUtils.degToRad(14)
+const UP = new THREE.Vector3(0, 1, 0)
+
 export function useSceneRig({ progressRef, activeExperienceId, experiences }: SceneRigInput) {
   const camera = useThree((state) => state.camera)
 
   const smoothProgress = useRef(0)
-  const smoothLookAt = useRef(new THREE.Vector3(0, 0, LOOK_AHEAD))
+  const smoothLookAt = useRef(roadFrame(LOOK_AHEAD).point.clone())
 
-  // Pre-allocate reusable vectors
-  const _targetLookAt = useRef(new THREE.Vector3())
-  const _targetCameraPos = useRef(new THREE.Vector3())
-  const _currentCameraPos = useRef(new THREE.Vector3())
+  const targetPos = useRef(new THREE.Vector3())
+  const targetLook = useRef(new THREE.Vector3())
+  const scratch = useRef(roadFrame(0))
+  const pose = useRef<CameraPose>({ position: new THREE.Vector3(), lookAt: new THREE.Vector3() })
 
   // Pre-compute experience data so we don't parse every frame
   const expLookup = useMemo(() => {
@@ -42,8 +47,6 @@ export function useSceneRig({ progressRef, activeExperienceId, experiences }: Sc
     return map
   }, [experiences])
 
-  const vFov = useMemo(() => THREE.MathUtils.degToRad(95), [])
-
   useFrame((state, frameDelta) => {
     const delta = Math.min(frameDelta, MAX_EASING_STEP)
     const scrollProgress = progressRef.current
@@ -51,44 +54,34 @@ export function useSceneRig({ progressRef, activeExperienceId, experiences }: Sc
 
     const lerpSpeed = activeData ? 1.5 : 4
     smoothProgress.current += (scrollProgress - smoothProgress.current) * Math.min(delta * lerpSpeed, 1)
-    const z = smoothProgress.current * ROAD_LENGTH
+    const distance = smoothProgress.current * ROAD_LENGTH
 
     let moving = Math.abs(scrollProgress - smoothProgress.current) * ROAD_LENGTH > REST_DISTANCE
 
     if (activeData) {
-      const { exp: activeExp, index: buildingIndex, buildingHeight } = activeData
-      const buildingZ = activeExp.position * ROAD_LENGTH
-      const side = buildingIndex % 2 === 0 ? 1 : -1
-      const buildingX = side * (ROAD_WIDTH / 2 + EXPERIENCE_SIDE_OFFSET)
-
-      const LOGO_OFFSET = 6
-      const LOGO_SIGN_HEIGHT_ESTIMATE = 5
-      const totalHeight = buildingHeight + LOGO_OFFSET + LOGO_SIGN_HEIGHT_ESTIMATE
-      const lookAtY = totalHeight / 2
-
-      const LOOK_AT_SIDE_OFFSET = -6
-      const lookAtX = buildingX + side * LOOK_AT_SIDE_OFFSET
-      _targetLookAt.current.set(lookAtX, lookAtY, buildingZ)
-
-      const margin = 0.7
-      const requiredDist = (totalHeight * margin) / (2 * Math.tan(vFov / 2))
-
-      const cameraOffsetX = side * -(requiredDist * 0.45)
-      const cameraOffsetZ = -(requiredDist * 0.95)
-      const cameraOffsetY = lookAtY + requiredDist * 0.09
-      _targetCameraPos.current.set(cameraOffsetX, cameraOffsetY, buildingZ + cameraOffsetZ)
-      _currentCameraPos.current.copy(camera.position)
-      _currentCameraPos.current.lerp(_targetCameraPos.current, Math.min(delta * 2, 1))
-      camera.position.copy(_currentCameraPos.current)
-
-      if (camera.position.distanceToSquared(_targetCameraPos.current) > REST_DISTANCE_SQ) moving = true
+      experiencePose(activeData.exp.position * ROAD_LENGTH, activeData.index, activeData.buildingHeight, pose.current)
+      targetPos.current.copy(pose.current.position)
+      targetLook.current.copy(pose.current.lookAt)
+      // A portrait screen sees too little to each side for the landmark beside the building:
+      // turn the view part of the way towards it.
+      const aspect = (camera as THREE.PerspectiveCamera).aspect ?? 1
+      const turn = experienceSide(activeData.index) * THREE.MathUtils.clamp((1 - aspect) * PORTRAIT_TURN, 0, PORTRAIT_TURN)
+      if (turn !== 0) {
+        targetLook.current.sub(targetPos.current).applyAxisAngle(UP, turn).add(targetPos.current)
+      }
     } else {
-      camera.position.set(0, CAMERA_HEIGHT, z)
-      _targetLookAt.current.set(0, 0, z + LOOK_AHEAD)
+      cruisePosition(distance, targetPos.current)
+      // Look down the road, along the curve.
+      targetLook.current.copy(roadFrame(distance + LOOK_AHEAD, scratch.current).point)
     }
 
-    smoothLookAt.current.lerp(_targetLookAt.current, Math.min(delta * 2, 1))
-    if (smoothLookAt.current.distanceToSquared(_targetLookAt.current) > REST_DISTANCE_SQ) moving = true
+    // Glide in and out of a building's view instead of cutting: the camera eases towards its
+    // target in both modes, faster while cruising so it keeps up with the scroll.
+    camera.position.lerp(targetPos.current, Math.min(delta * (activeData ? 2 : 6), 1))
+    if (camera.position.distanceToSquared(targetPos.current) > REST_DISTANCE_SQ) moving = true
+
+    smoothLookAt.current.lerp(targetLook.current, Math.min(delta * (activeData ? 2 : 5), 1))
+    if (smoothLookAt.current.distanceToSquared(targetLook.current) > REST_DISTANCE_SQ) moving = true
 
     camera.lookAt(smoothLookAt.current)
 
