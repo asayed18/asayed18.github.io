@@ -363,7 +363,7 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
         blendFunction={BlendFunction.NORMAL}
       />)
     if (perf.tier !== 'low') {
-      list.push(<Noise key="grain" blendFunction={BlendFunction.OVERLAY} opacity={isLight ? 0.12 : 0.18} />)
+      list.push(<Noise key="grain" blendFunction={BlendFunction.OVERLAY} opacity={isLight ? 0.06 : 0.07} />)
     }
     return list
   }, [perf, theme, rayDisc])
