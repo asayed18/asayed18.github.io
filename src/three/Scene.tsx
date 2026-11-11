@@ -65,17 +65,17 @@ export const Scene = memo(function Scene({
       <SkyGradient theme={theme} />
       {/* Thin haze: the near city is crisp, the skyline fades out over a couple of hundred units
           and the landmarks stand half-veiled behind it. */}
-      <fogExp2 attach="fog" args={[colors.fog, isLight ? 0.0082 : 0.0105]} />
+      <fogExp2 attach="fog" args={[colors.fog, isLight ? 0.0082 : 0.0072]} />
 
       {/* Sky and ground bounce instead of a flat ambient term: tops of things lighter than their
           undersides, as outdoors. */}
-      <hemisphereLight args={[isLight ? '#dfe8f2' : '#7f90ad', isLight ? '#8a7f70' : '#1a1611', isLight ? 0.8 : 0.32]} />
+      <hemisphereLight args={[isLight ? '#dfe8f2' : '#7f93b8', isLight ? '#8a7f70' : '#2a241c', isLight ? 0.8 : 0.42]} />
 
       {/* Primary directional light aligned with sun/moon – casts onto road and buildings */}
       <directionalLight
         ref={mainLightRef}
-        intensity={isLight ? 2.7 : 2.6}
-        color={isLight ? '#fff0d9' : '#b9c9e6'}
+        intensity={isLight ? 2.7 : 0.95}
+        color={isLight ? '#fff0d9' : '#c4d2ee'}
         castShadow
         shadow-mapSize-width={perf.shadowMapSize}
         shadow-mapSize-height={perf.shadowMapSize}
@@ -95,7 +95,7 @@ export const Scene = memo(function Scene({
           camera's view, so the extra shadow pass and lookup never changed a visible pixel. */}
       <directionalLight
         position={theme === 'light' ? [-8, 20, -15] : [8, 20, -15]}
-        intensity={theme === 'light' ? 0.45 : 0.25}
+        intensity={theme === 'light' ? 0.45 : 0.2}
       />
 
       <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />

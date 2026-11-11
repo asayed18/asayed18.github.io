@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Vector2, type WebGLRenderer } from 'three'
+import { Vector2, type Mesh, type WebGLRenderer } from 'three'
 import {
   EffectComposer,
   N8AO,
@@ -13,6 +13,7 @@ import {
   ChromaticAberration,
   DepthOfField,
   BrightnessContrast,
+  GodRays,
 } from '@react-three/postprocessing'
 import {
   BlendFunction,
@@ -210,6 +211,18 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
   // The depth of field follows what the camera looks at (see useSceneRig): the building in focus
   // is sharp and the city behind it softens; on the road the sharp zone is much deeper.
   const dofRef = useRef<DepthOfFieldEffect>(null)
+
+  // Light shafts: a small disc where the sun (or the moon) stands, kept at the same fixed offset
+  // from the camera as the visible body in lighting.tsx. The effect streaks its light through the
+  // haze wherever the buildings leave it a gap.
+  const [rayDisc, setRayDisc] = useState<Mesh | null>(null)
+  const isLightTheme = theme === 'light'
+  useFrame((state) => {
+    if (!rayDisc) return
+    const cam = state.camera.position
+    rayDisc.position.set(cam.x, cam.y + (isLightTheme ? 30 : 16), cam.z + 55)
+    rayDisc.lookAt(cam)
+  })
   useFrame((state, delta) => {
     const dof = dofRef.current
     if (!dof) return
@@ -256,12 +269,28 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
         />
       )
     }
+    if (perf.tier !== 'low' && rayDisc) {
+      list.push(
+        <GodRays
+          key="rays"
+          sun={rayDisc}
+          samples={perf.tier === 'high' ? 48 : 32}
+          density={0.97}
+          decay={0.94}
+          weight={isLight ? 0.45 : 0.35}
+          exposure={isLight ? 0.5 : 0.4}
+          clampMax={1}
+          blur
+          resolutionScale={0.5}
+        />
+      )
+    }
     if (perf.enableBloom) {
       list.push(
         <Bloom
           key="bloom"
-          intensity={isLight ? 0.45 : 1.1}
-          luminanceThreshold={isLight ? 0.72 : 0.35}
+          intensity={isLight ? 0.45 : 0.8}
+          luminanceThreshold={isLight ? 0.72 : 0.62}
           luminanceSmoothing={0.4}
           mipmapBlur
           radius={0.8}
@@ -282,22 +311,32 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
         />
       )
     }
-    list.push(<Vignette key="vignette" offset={0.25} darkness={isLight ? 0.5 : 0.7} blendFunction={BlendFunction.NORMAL} />)
+    list.push(<Vignette key="vignette" offset={0.25} darkness={isLight ? 0.5 : 0.55} blendFunction={BlendFunction.NORMAL} />)
     if (perf.tier !== 'low') {
       list.push(<Noise key="grain" blendFunction={BlendFunction.OVERLAY} opacity={isLight ? 0.12 : 0.18} />)
     }
     return list
-  }, [perf, theme])
+  }, [perf, theme, rayDisc])
 
   if (!mounted) return null
 
   return (
-    <EffectComposer
-      ref={composerRef}
-      enabled={compiled}
-      multisampling={0}
-    >
-      {effects}
-    </EffectComposer>
+    <>
+      {perf.tier !== 'low' && (
+        <mesh ref={setRayDisc} frustumCulled={false}>
+          <circleGeometry args={[isLightTheme ? 3.2 : 2.6, 24]} />
+          <meshBasicMaterial
+            color={isLightTheme ? '#fff1d6' : '#c9d6f0'}
+            transparent
+            opacity={0.9}
+            depthWrite={false}
+            fog={false}
+          />
+        </mesh>
+      )}
+      <EffectComposer ref={composerRef} enabled={compiled} multisampling={0}>
+        {effects}
+      </EffectComposer>
+    </>
   )
 })
