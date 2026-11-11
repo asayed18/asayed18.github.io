@@ -1,27 +1,80 @@
-import { useRef, useState, useEffect } from 'react'
-import { portfolioProjects } from '../data/portfolio'
+import { useRef, useState, useEffect, type RefObject } from 'react'
+import { portfolioProjects, type PortfolioProject } from '../data/portfolio'
+import { profile } from '../data/profile'
+import type { Theme } from '../theme'
 import './PortfolioSection.css'
-
-const FIREWORKS_DURATION = 2800 // ms – total time for fireworks + buffer
 
 interface PortfolioSectionProps {
   progress: number // 0 = just appearing, 1 = fully visible
-  theme: 'dark' | 'light'
+  theme: Theme
+  /** The element whose scrolling drives the journey. */
+  scrollRef: RefObject<HTMLElement | null>
+  /** Receives the scrollable overlay, so the page can send keyboard scrolling to it. */
+  overlayRef: RefObject<HTMLDivElement>
 }
 
-export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
-  const [fireworksPlaying, setFireworksPlaying] = useState(false)
+/**
+ * Card image. Projects with a clip get a muted, looping video that only loads and plays while
+ * the card is on screen; its poster is the still image.
+ */
+function CardMedia({ project }: { project: PortfolioProject }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    // The still image is all that is shown to people who asked for less motion.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Browsers may refuse to autoplay (low power mode); the poster stays in that case.
+          video.play().catch(() => {})
+        } else {
+          video.pause()
+        }
+      },
+      { threshold: 0.25 }
+    )
+    observer.observe(video)
+    return () => observer.disconnect()
+  }, [])
+
+  if (!project.thumbnail) return null
+  const [width, height] = project.thumbnailSize ?? []
+
+  return (
+    <div className="portfolio-card-thumb">
+      {project.video ? (
+        <video
+          ref={videoRef}
+          src={project.video}
+          poster={project.thumbnail}
+          width={width}
+          height={height}
+          muted
+          loop
+          playsInline
+          preload="none"
+          aria-label={project.title}
+        />
+      ) : (
+        <img src={project.thumbnail} alt={project.title} width={width} height={height} loading="lazy" decoding="async" />
+      )}
+    </div>
+  )
+}
+
+export function PortfolioSection({ progress, theme, scrollRef, overlayRef }: PortfolioSectionProps) {
   const lastTouchY = useRef(0)
-  const fireworksTriggered = useRef(false)
 
-  const overlayRef = useRef<HTMLDivElement>(null)
-
-  // Keep progress & fireworks state in refs so the wheel handler always has
-  // the latest values without needing to re-register the listener every frame.
+  // Keep progress in a ref so the wheel handler always has the latest value
+  // without needing to re-register the listener every frame.
   const progressRef = useRef(progress)
   progressRef.current = progress
-  const fireworksRef = useRef(fireworksPlaying)
-  fireworksRef.current = fireworksPlaying
+
+  const mounted = progress > 0
 
   // Register a non-passive wheel listener so preventDefault actually works
   // (React's onWheel is passive and cannot prevent default scrolling).
@@ -29,11 +82,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
     const el = overlayRef.current
     if (!el) return
     const handleWheel = (e: WheelEvent) => {
-      if (fireworksRef.current) {
-        e.preventDefault()
-        return
-      }
-      const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+      const scrollContainer = scrollRef.current
       if (!scrollContainer) return
 
       // While the portfolio is still transitioning in, forward ALL wheel
@@ -56,11 +105,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
       lastTouchY.current = e.touches[0].pageY
     }
     const handleTouchMove = (e: TouchEvent) => {
-      if (fireworksRef.current) {
-        e.preventDefault()
-        return
-      }
-      const scrollContainer = document.querySelector('.scroll-container') as HTMLElement
+      const scrollContainer = scrollRef.current
       if (!scrollContainer) return
 
       const currentY = e.touches[0].pageY
@@ -87,8 +132,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
       el.removeEventListener('touchstart', handleTouchStart)
       el.removeEventListener('touchmove', handleTouchMove)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress > 0]) // re-run when overlay mounts/unmounts; refs keep other values fresh
+  }, [mounted, overlayRef, scrollRef]) // re-run when overlay mounts/unmounts; refs keep other values fresh
 
   // Track CTA visibility within the scrollable overlay
   const ctaRef = useRef<HTMLDivElement>(null)
@@ -103,9 +147,13 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [progress > 0])
+  }, [mounted])
 
-  // Freeze scrolling while fireworks play
+  // The fireworks below are switched off. The effect that played them, and froze scrolling for
+  // their duration, was commented out, so they collapse (--done) the moment they would start
+  // (--active). The markup and styles are kept for whoever brings them back:
+  //
+  // const FIREWORKS_DURATION = 2800 // ms – total time for fireworks + buffer
   // useEffect(() => {
   //   if (ctaVisible && !fireworksTriggered.current) {
   //     fireworksTriggered.current = true
@@ -118,9 +166,15 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
   //   }
   // }, [ctaVisible])
 
-  if (progress <= 0) return null
+  if (!mounted) return null
 
   const ease = progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2
+
+  const calendlyUrl =
+    `${profile.calendly}?hide_landing_page_details=1&hide_gdpr_banner=1` +
+    `&background_color=${theme === 'dark' ? '1a1a1a' : 'e0e0e0'}` +
+    `&text_color=${theme === 'dark' ? 'cccccc' : '333333'}` +
+    `&primary_color=${theme === 'dark' ? '888888' : '555555'}`
 
   return (
     <div
@@ -136,6 +190,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
       {ease < 0.88 && (
         <div
           className="portfolio-hero-title"
+          aria-hidden="true"
           style={{
             opacity: ease < 0.12
               ? Math.min(ease / 0.12, 1)
@@ -183,15 +238,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
                   transform: `translateY(${(1 - cardEase) * 30}px)`,
                 }}
               >
-                {project.thumbnail && (
-                  <div className="portfolio-card-thumb">
-                    <img
-                      src={project.thumbnail}
-                      alt={project.title}
-                      loading="lazy"
-                    />
-                  </div>
-                )}
+                <CardMedia project={project} />
                 <div className="portfolio-card-body">
                   <h3 className="portfolio-card-title">{project.title}</h3>
                   <p className="portfolio-card-desc">{project.description}</p>
@@ -214,8 +261,11 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
             Still interested?
           </h2>
 
-          {/* Fireworks animation – collapses after playing */}
-          <div className={`portfolio-fireworks ${ctaVisible ? 'portfolio-fireworks--active' : ''} ${ctaVisible && !fireworksPlaying ? 'portfolio-fireworks--done' : ''}`}>
+          {/* Fireworks animation – collapses after playing (switched off, see above) */}
+          <div
+            className={`portfolio-fireworks ${ctaVisible ? 'portfolio-fireworks--active portfolio-fireworks--done' : ''}`}
+            aria-hidden="true"
+          >
             {Array.from({ length: 3 }).map((_, burst) => (
               <div key={burst} className={`firework firework--${burst}`}>
                 {Array.from({ length: 12 }).map((_, spark) => (
@@ -235,13 +285,7 @@ export function PortfolioSection({ progress, theme }: PortfolioSectionProps) {
           >
             {ctaVisible && (
               <div className="portfolio-calendly-scale">
-                <iframe
-                  src={`https://calendly.com/ahmed-salam/meeting?hide_landing_page_details=1&hide_gdpr_banner=1&background_color=${theme === 'dark' ? '1a1a1a' : 'e0e0e0'}&text_color=${theme === 'dark' ? 'cccccc' : '333333'}&primary_color=${theme === 'dark' ? '888888' : '555555'}`}
-                  width="100%"
-                  height="700"
-                  frameBorder="0"
-                  title="Schedule a call"
-                />
+                <iframe src={calendlyUrl} width="100%" height="700" title="Schedule a call" />
               </div>
             )}
           </div>

@@ -1,4 +1,6 @@
-import type { Theme } from '../App'
+import type { Theme } from '../theme'
+import { AVATAR_SRC, profile } from '../data/profile'
+import { MoonIcon, SunIcon } from './Icons'
 import './Header.css'
 
 interface HeaderProps {
@@ -6,9 +8,13 @@ interface HeaderProps {
   onToggleTheme: () => void
   showAvatar: boolean
   avatarProgress: number // 0 = just appearing, 1 = fully settled
-  onNavigatePortfolio?: () => void
-  onOpenAbout?: () => void
-  onNavigateHome?: () => void
+  /** The name is the page's main heading once the landing screen, which has its own, is gone. */
+  nameIsHeading: boolean
+  /** Opaque bar, for when the header sits above scrolling content. */
+  solid: boolean
+  onNavigatePortfolio: () => void
+  onOpenAbout: () => void
+  onNavigateHome: () => void
 }
 
 export function Header({
@@ -16,6 +22,8 @@ export function Header({
   onToggleTheme,
   showAvatar,
   avatarProgress,
+  nameIsHeading,
+  solid,
   onNavigatePortfolio,
   onOpenAbout,
   onNavigateHome,
@@ -29,60 +37,62 @@ export function Header({
   const avatarOffsetY = (1 - ease) * 25       // 25px → 0 (from below, matching hero direction)
   const avatarOpacity = ease                   // 0 → 1
 
+  const Name = nameIsHeading ? 'h1' : 'span'
+
   return (
-    <header className="header">
+    <header className={solid ? 'header header--solid' : 'header'}>
       <div className={`header-brand ${showAvatar ? 'header-brand--with-avatar' : ''}`}>
         {showAvatar && (
-          <img
-            src="/avatar.png"
-            alt="Ahmed Sayed"
-            className="header-avatar"
-            style={{
-              transform: `scale(${avatarScale}) translate(${avatarOffsetX}px, ${avatarOffsetY}px)`,
-              opacity: avatarOpacity,
-              cursor: 'pointer',
-            }}
-            onClick={onNavigateHome}
-            title="Back to start"
-          />
+          <button type="button" className="header-avatar-button" onClick={onNavigateHome} title="Back to start">
+            <img
+              src={AVATAR_SRC}
+              alt="Back to start"
+              width={36}
+              height={36}
+              className="header-avatar"
+              style={{
+                transform: `scale(${avatarScale}) translate(${avatarOffsetX}px, ${avatarOffsetY}px)`,
+                opacity: avatarOpacity,
+              }}
+            />
+          </button>
         )}
         <div className="header-brand-text">
-          <span className="header-name">Ahmed Sayed</span>
-          <span className="header-tagline">Sr. Software Engineer</span>
+          <Name className="header-name">{profile.name}</Name>
+          <span className="header-tagline">{profile.headerTagline}</span>
         </div>
       </div>
-      <nav className="header-nav">
+      <nav className="header-nav" aria-label="Main">
         <a
           href="#about"
           onClick={(e) => {
             e.preventDefault()
-            onOpenAbout?.()
+            onOpenAbout()
           }}
         >
           About
         </a>
-        <a href="mailto:me@asayed18.top">Contact</a>
-        <a href="https://linkedin.com/in/a-abdelsalam" target="_blank" rel="noreferrer">LinkedIn</a>
-        <a href="https://github.com/asayed18" target="_blank" rel="noreferrer">GitHub</a>
+        <a href={`mailto:${profile.email}`}>Contact</a>
+        <a href={profile.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>
+        <a href={profile.github} target="_blank" rel="noreferrer">GitHub</a>
         <a
           href="#portfolio"
           onClick={(e) => {
             e.preventDefault()
-            onNavigatePortfolio?.()
+            onNavigatePortfolio()
           }}
         >
           Portfolio
         </a>
       </nav>
       <div className="header-actions">
-        <button type="button" className="theme-toggle" aria-label="Toggle theme" onClick={onToggleTheme}>
-        <span className="theme-icon">
-          {theme === 'dark' ? (
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-          )}
-        </span>
+        <button
+          type="button"
+          className="theme-toggle"
+          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          onClick={onToggleTheme}
+        >
+          <span className="theme-icon">{theme === 'dark' ? <SunIcon size={16} /> : <MoonIcon size={16} />}</span>
         </button>
       </div>
     </header>

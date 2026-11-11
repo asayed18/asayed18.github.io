@@ -10,6 +10,13 @@
   z-index: 10;
 }
 
+/* Above scrolling content (the portfolio) the header needs a surface of its own. */
+.header--solid {
+  background: var(--panel-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .header-brand {
   display: flex;
   align-items: center;
@@ -18,6 +25,15 @@
 
 .header-brand--with-avatar {
   gap: 0.75rem;
+}
+
+.header-avatar-button {
+  display: flex;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
 }
 
 .header-avatar {
@@ -38,8 +54,11 @@
 }
 
 .header-name {
+  /* Rendered as an <h1> once the landing screen is gone: same look either way. */
+  margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
+  line-height: inherit;
   letter-spacing: 0.02em;
 }
 
@@ -81,23 +100,6 @@
   display: flex;
   gap: 0.35rem;
   align-items: center;
-}
-
-.beta-toggle {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.4rem 0.55rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-}
-
-.beta-toggle--on {
-  background: linear-gradient(135deg, #a0a0a0, #707070);
-  color: #0d0d0d;
-  border-color: transparent;
 }
 
 /* ── Mobile responsive ── */

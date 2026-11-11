@@ -43,6 +43,30 @@
   pointer-events: auto;
 }
 
+/* While the portfolio (z-index 15) is open the header stays on top of it, so its links and the
+   theme switch keep working. */
+.ui-overlay--above-portfolio {
+  z-index: 16;
+}
+
+/* Shown only while it has keyboard focus. */
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 30;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
 .site-footer {
   position: fixed;
   bottom: 0.75rem;
@@ -53,4 +77,12 @@
   opacity: 0.4;
   pointer-events: none;
   letter-spacing: 0.02em;
+}
+
+/* On phones the experience panel is a sheet across the bottom: keep the footer under it instead
+   of printing it over the panel's text. */
+@media (max-width: 768px) {
+  .site-footer {
+    z-index: 1;
+  }
 }

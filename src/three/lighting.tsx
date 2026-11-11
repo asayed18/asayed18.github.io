@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, Suspense } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js'
 import { END_LIGHT_HEIGHT, ROAD_LENGTH } from './config'
+import { useStaticShadow } from './shadows'
 
 const MOON_TEXTURE_URL = '/textures/moon.webp'
 
@@ -14,16 +15,15 @@ const MOON_DIR = MOON_OFFSET.clone().normalize()
 
 /* Monochromatic gradient sky with realistic clouds, matching colors, subtle motion, moon lit */
 export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
-  const celestialDirRef = useRef(new THREE.Vector3())
+  // Both materials are created once. The theme only changes uniform values, so switching it
+  // neither rebuilds the shaders nor restarts the cloud drift.
   const material = useMemo(() => {
-    const isLight = theme === 'light'
-    celestialDirRef.current.copy(isLight ? SUN_DIR : MOON_DIR)
     return new THREE.ShaderMaterial({
       uniforms: {
-        topColor: { value: new THREE.Color(isLight ? '#cccccc' : '#000000') },
-        bottomColor: { value: new THREE.Color(isLight ? '#ffffff' : '#0a0a0a') },
-        celestialDir: { value: celestialDirRef.current },
-        moonHighlight: { value: new THREE.Color(isLight ? '#ffffff' : '#444444') },
+        topColor: { value: new THREE.Color() },
+        bottomColor: { value: new THREE.Color() },
+        celestialDir: { value: new THREE.Vector3() },
+        moonHighlight: { value: new THREE.Color() },
         iTime: { value: 0 },
         uSphereRadius: { value: 500.0 },
       },
@@ -107,23 +107,13 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
       side: THREE.BackSide,
       depthWrite: false,
     })
-  }, [theme])
-
-  useEffect(() => {
-    const isLight = theme === 'light'
-    material.uniforms.topColor.value.set(isLight ? '#cccccc' : '#000000')
-    material.uniforms.bottomColor.value.set(isLight ? '#ffffff' : '#0a0a0a')
-    celestialDirRef.current.copy(isLight ? SUN_DIR : MOON_DIR)
-    material.uniforms.celestialDir.value.copy(celestialDirRef.current)
-    material.uniforms.moonHighlight.value.set(isLight ? '#ffffff' : '#444444')
-  }, [theme, material])
+  }, [])
 
   const innerMaterial = useMemo(() => {
-    const isLight = theme === 'light'
     return new THREE.ShaderMaterial({
       uniforms: {
-        topColor: { value: new THREE.Color(isLight ? '#cccccc' : '#000000') },
-        bottomColor: { value: new THREE.Color(isLight ? '#ffffff' : '#0a0a0a') },
+        topColor: { value: new THREE.Color() },
+        bottomColor: { value: new THREE.Color() },
         iTime: { value: 0 },
       },
       vertexShader: `
@@ -195,12 +185,26 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
       depthWrite: false,
       transparent: true,
     })
-  }, [theme])
+  }, [])
 
-  useEffect(() => {
+  // Layout effect: the uniforms must hold the theme colours before the first frame is drawn.
+  useLayoutEffect(() => {
+    const isLight = theme === 'light'
+    material.uniforms.topColor.value.set(isLight ? '#cccccc' : '#000000')
+    material.uniforms.bottomColor.value.set(isLight ? '#ffffff' : '#0a0a0a')
+    material.uniforms.celestialDir.value.copy(isLight ? SUN_DIR : MOON_DIR)
+    material.uniforms.moonHighlight.value.set(isLight ? '#ffffff' : '#444444')
     innerMaterial.uniforms.topColor.value.copy(material.uniforms.topColor.value)
     innerMaterial.uniforms.bottomColor.value.copy(material.uniforms.bottomColor.value)
   }, [theme, material, innerMaterial])
+
+  useEffect(
+    () => () => {
+      material.dispose()
+      innerMaterial.dispose()
+    },
+    [material, innerMaterial]
+  )
 
   const meshRef = useRef<THREE.Mesh>(null)
   const innerMeshRef = useRef<THREE.Mesh>(null)
@@ -316,10 +320,11 @@ export function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; se
     lensflare.addElement(new LensflareElement(texRing, 130, 0.6, new THREE.Color('#e8e8e8')))
     lensflare.addElement(new LensflareElement(texSoft, 85, 0.8, new THREE.Color('#e0e0e0')))
 
-    flareHost.current.add(lensflare)
+    const host = flareHost.current
+    host.add(lensflare)
 
     return () => {
-      flareHost.current?.remove(lensflare)
+      host.remove(lensflare)
       lensflare.dispose()
       texMain.dispose()
       texSoft.dispose()
@@ -345,12 +350,13 @@ export function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; se
 
   return (
     <group ref={groupRef} frustumCulled={false}>
+      {/* No shadow: this light follows the camera 55 units ahead, so a shadow would need six
+          fresh passes over the whole city every frame for a contribution that is not visible. */}
       <pointLight
         color={isLight ? '#ffffff' : '#e0e0e0'}
         intensity={isLight ? 2.9 : 2.8}
         distance={350}
         decay={1.8}
-        castShadow
       />
       {isLight ? (
         <>
@@ -404,16 +410,15 @@ export function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; se
   )
 }
 
-export function EndOfRoadLight({ theme }: { theme: 'light' | 'dark'; segments?: number }) {
-  const position: [number, number, number] = [-20, END_LIGHT_HEIGHT, ROAD_LENGTH]
+const END_LIGHT_POSITION: [number, number, number] = [-20, END_LIGHT_HEIGHT, ROAD_LENGTH]
+
+export function EndOfRoadLight() {
+  // The light and everything it shines on are static, so its six shadow passes are baked once.
+  const lightRef = useStaticShadow<THREE.PointLight>()
 
   return (
-    <group position={position}>
-      <pointLight
-        color={'#ffffff'}
-        intensity={theme === 'light' ? 5000 : 5000}
-        castShadow
-      />
+    <group position={END_LIGHT_POSITION}>
+      <pointLight ref={lightRef} color="#ffffff" intensity={5000} castShadow />
     </group>
   )
 }
