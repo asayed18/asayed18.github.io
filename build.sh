@@ -28,7 +28,7 @@ fi
 
 # 3. Type-check
 echo "→ Running TypeScript type-check..."
-npx tsc -b --noEmit 2>/dev/null || npx tsc -b
+npm run typecheck
 echo "✓ Type-check passed"
 
 # 4. Build for production

@@ -99,7 +99,8 @@ a.portfolio-card {
   flex-shrink: 0;
 }
 
-.portfolio-card-thumb img {
+.portfolio-card-thumb img,
+.portfolio-card-thumb video {
   width: 100%;
   height: auto;
   display: block;
@@ -107,7 +108,8 @@ a.portfolio-card {
   transition: filter 0.35s ease;
 }
 
-.portfolio-card:hover .portfolio-card-thumb img {
+.portfolio-card:hover .portfolio-card-thumb img,
+.portfolio-card:hover .portfolio-card-thumb video {
   filter: grayscale(60%);
 }
 

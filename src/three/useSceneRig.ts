@@ -1,64 +1,35 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Experience } from '../data/experiences'
-import type { PerfPreset } from '../utils/devicePerf'
 import { CAMERA_HEIGHT, LOOK_AHEAD, ROAD_LENGTH, ROAD_WIDTH, EXPERIENCE_SIDE_OFFSET } from './config'
-
-const MONTH_MAP: Record<string, number> = {
-  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
-}
-
-function parsePeriodMonths(period: string): number {
-  const parts = period.split('–').map((s) => s.trim())
-  const parseDate = (s: string): Date => {
-    if (s === 'Present') return new Date()
-    const [mon, year] = s.split(' ')
-    return new Date(parseInt(year), MONTH_MAP[mon] ?? 0)
-  }
-  const start = parseDate(parts[0])
-  const end = parseDate(parts[1] ?? 'Present')
-  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
-  return Math.max(months, 1)
-}
-
-function monthsToHeight(months: number): number {
-  const MIN_HEIGHT = 4
-  const MAX_HEIGHT = 16
-  const t = Math.min(Math.max(months, 6), 48)
-  return MIN_HEIGHT + ((t - 6) / (48 - 6)) * (MAX_HEIGHT - MIN_HEIGHT)
-}
+import { parsePeriodMonths, monthsToHeight } from './period'
+import { keepRendering, MAX_EASING_STEP } from './pacing'
 
 interface SceneRigInput {
-  scrollProgress: number
+  /**
+   * Scroll progress (0 to 1). A ref, not a prop: the camera reads it once per frame, so scrolling
+   * does not re-render the React tree.
+   */
+  progressRef: MutableRefObject<number>
   activeExperienceId: string | null
   experiences: Experience[]
-  perf: PerfPreset
-  onReady?: () => void
 }
 
-export function useSceneRig({ scrollProgress, activeExperienceId, experiences, perf, onReady }: SceneRigInput) {
-  const { camera, gl } = useThree()
+/** The camera counts as at rest once it is this close (world units) to where it is heading. */
+const REST_DISTANCE = 0.01
+const REST_DISTANCE_SQ = REST_DISTANCE * REST_DISTANCE
 
-  // Clamp DPR by perf tier
-  useEffect(() => {
-    const maxDpr = perf.dpr[1]
-    const deviceDpr = window.devicePixelRatio || 1
-    gl.setPixelRatio(Math.min(deviceDpr, maxDpr))
-  }, [gl, perf.dpr])
+export function useSceneRig({ progressRef, activeExperienceId, experiences }: SceneRigInput) {
+  const camera = useThree((state) => state.camera)
 
   const smoothProgress = useRef(0)
   const smoothLookAt = useRef(new THREE.Vector3(0, 0, LOOK_AHEAD))
-  const readyFired = useRef(false)
-  const frameCount = useRef(0)
-  const buildingsReady = useRef(false)
 
   // Pre-allocate reusable vectors
   const _targetLookAt = useRef(new THREE.Vector3())
   const _targetCameraPos = useRef(new THREE.Vector3())
   const _currentCameraPos = useRef(new THREE.Vector3())
-  const _defaultLookAt = useRef(new THREE.Vector3())
 
   // Pre-compute experience data so we don't parse every frame
   const expLookup = useMemo(() => {
@@ -71,29 +42,18 @@ export function useSceneRig({ scrollProgress, activeExperienceId, experiences, p
     return map
   }, [experiences])
 
-  const handleBuildingsReady = useCallback(() => {
-    buildingsReady.current = true
-  }, [])
-
-  // Wait for buildings ready + a few frames before firing ready
-  useFrame(() => {
-    if (!readyFired.current && buildingsReady.current) {
-      frameCount.current++
-      if (frameCount.current >= 5) {
-        readyFired.current = true
-        onReady?.()
-      }
-    }
-  })
-
   const vFov = useMemo(() => THREE.MathUtils.degToRad(95), [])
 
-  useFrame((_, delta) => {
+  useFrame((state, frameDelta) => {
+    const delta = Math.min(frameDelta, MAX_EASING_STEP)
+    const scrollProgress = progressRef.current
     const activeData = activeExperienceId ? expLookup.get(activeExperienceId) : null
 
     const lerpSpeed = activeData ? 1.5 : 4
     smoothProgress.current += (scrollProgress - smoothProgress.current) * Math.min(delta * lerpSpeed, 1)
     const z = smoothProgress.current * ROAD_LENGTH
+
+    let moving = Math.abs(scrollProgress - smoothProgress.current) * ROAD_LENGTH > REST_DISTANCE
 
     if (activeData) {
       const { exp: activeExp, index: buildingIndex, buildingHeight } = activeData
@@ -109,7 +69,6 @@ export function useSceneRig({ scrollProgress, activeExperienceId, experiences, p
       const LOOK_AT_SIDE_OFFSET = -6
       const lookAtX = buildingX + side * LOOK_AT_SIDE_OFFSET
       _targetLookAt.current.set(lookAtX, lookAtY, buildingZ)
-      smoothLookAt.current.lerp(_targetLookAt.current, Math.min(delta * 2, 1))
 
       const margin = 0.7
       const requiredDist = (totalHeight * margin) / (2 * Math.tan(vFov / 2))
@@ -121,14 +80,19 @@ export function useSceneRig({ scrollProgress, activeExperienceId, experiences, p
       _currentCameraPos.current.copy(camera.position)
       _currentCameraPos.current.lerp(_targetCameraPos.current, Math.min(delta * 2, 1))
       camera.position.copy(_currentCameraPos.current)
+
+      if (camera.position.distanceToSquared(_targetCameraPos.current) > REST_DISTANCE_SQ) moving = true
     } else {
       camera.position.set(0, CAMERA_HEIGHT, z)
-      _defaultLookAt.current.set(0, 0, z + LOOK_AHEAD)
-      smoothLookAt.current.lerp(_defaultLookAt.current, Math.min(delta * 2, 1))
+      _targetLookAt.current.set(0, 0, z + LOOK_AHEAD)
     }
 
-    ;(camera as THREE.PerspectiveCamera).lookAt(smoothLookAt.current)
-  })
+    smoothLookAt.current.lerp(_targetLookAt.current, Math.min(delta * 2, 1))
+    if (smoothLookAt.current.distanceToSquared(_targetLookAt.current) > REST_DISTANCE_SQ) moving = true
 
-  return { handleBuildingsReady }
+    camera.lookAt(smoothLookAt.current)
+
+    // Ask for the next frame only while the camera is still travelling.
+    if (moving) keepRendering(state)
+  })
 }

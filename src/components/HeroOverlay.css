@@ -7,9 +7,26 @@
   justify-content: center;
 }
 
+/* Tint of the backdrop per theme. */
+:root,
+[data-theme="dark"] {
+  --hero-backdrop-rgb: 0, 0, 0;
+  --hero-backdrop-alpha: 0.5;
+}
+
+[data-theme="light"] {
+  --hero-backdrop-rgb: 220, 220, 220;
+  --hero-backdrop-alpha: 0.55;
+}
+
 .hero-backdrop {
+  /* 1 at the top of the page, 0 once the overlay has dissolved. Set inline while scrolling. */
+  --hero-fade: 1;
   position: absolute;
   inset: 0;
+  background: rgba(var(--hero-backdrop-rgb), calc(var(--hero-backdrop-alpha) * var(--hero-fade)));
+  backdrop-filter: blur(calc(var(--hero-fade) * 12px));
+  -webkit-backdrop-filter: blur(calc(var(--hero-fade) * 12px));
 }
 
 .hero-content {

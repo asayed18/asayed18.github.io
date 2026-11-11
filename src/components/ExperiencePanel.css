@@ -12,6 +12,16 @@
   border-radius: 0;
   box-shadow: none;
   z-index: 1;
+
+  /* Hidden until .experience-panel--visible is added; the same transition slides it in and out.
+     EXIT_MS in ExperiencePanel.tsx matches the longest duration here. */
+  opacity: 0;
+  transition:
+    transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1),
+    opacity 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .experience-panel--left {
@@ -19,6 +29,7 @@
   right: auto;
   justify-content: center;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+  transform: translateX(-60px);
 }
 
 .experience-panel--right {
@@ -26,6 +37,44 @@
   left: auto;
   justify-content: center;
   border-left: 1px solid rgba(255, 255, 255, 0.06);
+  transform: translateX(60px);
+}
+
+.experience-panel--visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* The title, then the details, rise into place shortly after the panel starts sliding in. */
+.experience-panel-title,
+.experience-panel-cards {
+  animation: experience-panel-rise 0.35s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s both;
+}
+
+.experience-panel-cards {
+  animation-delay: 0.2s;
+}
+
+@keyframes experience-panel-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .experience-panel {
+    transition: none;
+  }
+
+  .experience-panel-title,
+  .experience-panel-cards {
+    animation: none;
+  }
 }
 
 .experience-panel-content {

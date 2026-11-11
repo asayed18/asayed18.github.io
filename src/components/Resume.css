@@ -1,0 +1,162 @@
+/*
+ * Text version of the site.
+ *
+ * Three situations share this markup:
+ * - 3D journey running: the text stays in the page, off screen, for search engines and screen
+ *   readers (.resume--offscreen).
+ * - No WebGL, the 3D scene failed, or the visitor asked for the text version: shown as a page.
+ * - JavaScript off or not loaded yet: the static HTML built into index.html. The `js` class on
+ *   <html> is set by an inline script, so without it the text below simply shows.
+ */
+
+.resume {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 5rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.js .resume--offscreen {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.resume h2 {
+  margin: 2.5rem 0 1rem;
+  padding-bottom: 0.4rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--tag-bg);
+}
+
+.resume h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.resume p {
+  margin: 0 0 0.75rem;
+}
+
+.resume a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.resume-item {
+  margin-bottom: 1.75rem;
+}
+
+.resume-period {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.resume-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resume-tags li {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--tag-bg);
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+/* ── Text page (JavaScript on, 3D journey not shown) ── */
+
+.text-page-header {
+  position: relative;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 0;
+  text-align: center;
+}
+
+.text-page-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter: grayscale(100%);
+  border: 3px solid var(--hero-avatar-border);
+}
+
+.text-page-name {
+  margin: 1rem 0 0.25rem;
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.text-page-headline {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.text-page-links {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.text-page-links a {
+  display: flex;
+  color: var(--text-muted);
+}
+
+.text-page-links a:hover {
+  color: var(--text);
+}
+
+.text-page-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.35rem;
+}
+
+.text-page-notice {
+  max-width: 720px;
+  margin: 1.5rem auto 0;
+  padding: 0 1.5rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.text-page-notice a {
+  text-decoration: underline;
+}
+
+/* ── JavaScript off or not loaded: the landing screen becomes the page header ── */
+
+html:not(.js) .hero-overlay {
+  position: static;
+  padding: 4rem 1.5rem 0;
+}
+
+html:not(.js) .hero-backdrop,
+html:not(.js) .hero-scroll-hint,
+html:not(.js) .hero-avatar-wrapper::after {
+  display: none;
+}

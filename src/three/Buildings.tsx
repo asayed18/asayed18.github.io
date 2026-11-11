@@ -1,43 +1,49 @@
-import { useMemo, useRef, useEffect, memo } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { useTexture, Text } from '@react-three/drei'
-import { CanvasText } from './CanvasText'
+import { useMemo, useRef, useEffect, useLayoutEffect, memo } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
+import { useTexture } from '@react-three/drei'
+import { CanvasText, GroundText } from './CanvasText'
 import * as THREE from 'three'
 import type { Experience } from '../data/experiences'
-import type { Theme } from '../App'
+import type { Theme } from '../theme'
 import type { PerfPreset } from '../utils/devicePerf'
 import { ROAD_WIDTH, BACKGROUND_SIDE_OFFSET } from './config'
+import { parsePeriodMonths, monthsToHeight } from './period'
+import { useStaticShadow } from './shadows'
+import { keepRendering, MAX_EASING_STEP } from './pacing'
 
 const SIDE_OFFSET = BACKGROUND_SIDE_OFFSET
 const BUILDING_WIDTH = 5
 
-const MONTH_MAP: Record<string, number> = {
-  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+/**
+ * Wall textures. Every wall repeats them 20 times, so one tile never covers more than about
+ * 64 screen pixels: 256px sources are sampled exactly like the former 1K ones (the GPU only ever
+ * reached their small mip levels) at a sixteenth of the download and GPU memory.
+ */
+const PLASTER_TEXTURES = [
+  '/textures/painted_plaster_wall_diff_256.webp',
+  '/textures/painted_plaster_wall_nor_gl_256.webp',
+  '/textures/painted_plaster_wall_rough_256.webp',
+]
+
+function usePlasterTextures() {
+  const textures = useTexture(PLASTER_TEXTURES)
+  textures.forEach((tex) => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(20, 20)
+  })
+  return textures
 }
 
-function parsePeriodMonths(period: string): number {
-  const parts = period.split('–').map((s) => s.trim())
-  const parseDate = (s: string): Date => {
-    if (s === 'Present') return new Date()
-    const [mon, year] = s.split(' ')
-    return new Date(parseInt(year), MONTH_MAP[mon] ?? 0)
-  }
-  const start = parseDate(parts[0])
-  const end = parseDate(parts[1] ?? 'Present')
-  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
-  return Math.max(months, 1)
-}
+/**
+ * The walls used to carry a displacement map. A box has no vertices inside its faces, so the map
+ * could not add relief: it only pulled every face inwards by this constant amount (in units of
+ * the box geometry) and cost a vertex-shader texture lookup plus extra shadow shader variants.
+ * The inset is applied to the geometry instead, so nothing moves.
+ */
+const PLASTER_INSET = 0.0077
 
-// Scale months to building height: min 4, max 16
-const MIN_HEIGHT = 4
-const MAX_HEIGHT = 16
-
-function monthsToHeight(months: number): number {
-  // Clamp between 6 months and 48 months for scaling
-  const t = Math.min(Math.max(months, 6), 48)
-  return MIN_HEIGHT + ((t - 6) / (48 - 6)) * (MAX_HEIGHT - MIN_HEIGHT)
-}
+const WINDOW_GEOMETRY = new THREE.PlaneGeometry(1, 1)
+const UNIT_BOX_GEOMETRY = new THREE.BoxGeometry(1, 1, 1)
 
 interface BuildingsProps {
   roadLength: number
@@ -45,7 +51,6 @@ interface BuildingsProps {
   activeExperienceId: string | null
   theme: Theme
   perf: PerfPreset
-  onReady?: () => void
 }
 
 /* Giza Pyramids landmark (far behind the first experience building) */
@@ -295,16 +300,13 @@ const RoadDateMarking = memo(function RoadDateMarking({
         />
       </mesh>
 
-      <Text
-        position={[0, 0, 0]}
+      <GroundText
         rotation={[-Math.PI / 2, 0, Math.PI]}
         fontSize={0.9}
         color={isActive ? (isLight ? '#343434' : '#5a5a5a') : (isLight ? '#888888' : '#666666')}
-        anchorX="center"
-        anchorY="middle"
       >
         {joinDate}
-      </Text>
+      </GroundText>
     </group>
   )
 })
@@ -328,9 +330,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   isActive: boolean
   isLight: boolean
 }) {
-  const sharedWindowGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
-  const sharedLedgeGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
-
   const floorHeight = height / numFloors
   const windowWidth = 0.55
   const windowHeight = floorHeight * 0.45
@@ -367,16 +366,25 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
     return result
   }, [numFloors, floorHeight])
 
-  const texture = useTexture([
-    '/textures/painted_plaster_wall_diff_1k.webp',
-    '/textures/painted_plaster_wall_nor_gl_1k.webp',
-    '/textures/painted_plaster_wall_rough_1k.webp',
-    '/textures/painted_plaster_wall_disp_1k.webp',
-  ])
-  texture.forEach((tex) => {
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(20, 20)
-  })
+  const texture = usePlasterTextures()
+
+  // One instanced mesh for all windows of the building instead of one mesh and one material per
+  // window (the Babbel tower alone has 60).
+  const windowsRef = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const mesh = windowsRef.current
+    if (!mesh) return
+    const dummy = new THREE.Object3D()
+    windows.forEach((win, i) => {
+      dummy.position.set(win.pos[0], win.pos[1], win.pos[2])
+      dummy.rotation.set(win.rot[0], win.rot[1], win.rot[2])
+      dummy.scale.set(windowWidth, windowHeight, 1)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
+  }, [windows, windowWidth, windowHeight])
 
   const bodyColor = isActive ? (isLight ? '#ffffff' : '#666666') : (isLight ? '#e0e0e0' : '#111111')
   const bodyEmissive = isActive ? (isLight ? '#dddddd' : '#222222') : (isLight ? '#000000' : '#000000')
@@ -387,7 +395,9 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   return (
     <group position={[x, 0, 0]}>
       <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[width, height, depth]} />
+        <boxGeometry
+          args={[width - 2 * PLASTER_INSET, height - 2 * PLASTER_INSET, depth - 2 * PLASTER_INSET]}
+        />
         <meshStandardMaterial
           color={bodyColor}
           emissive={bodyEmissive}
@@ -395,51 +405,33 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
           map={texture[0]}
           normalMap={texture[1]}
           roughnessMap={texture[2]}
-          displacementMap={texture[3]}
-          displacementScale={-0.01}
           roughness={0.9}
           metalness={0.03}
         />
       </mesh>
 
-      {windows.map((win, i) => (
-        <mesh
-          key={`w-${i}`}
-          position={win.pos}
-          rotation={win.rot}
-          geometry={sharedWindowGeo}
-          scale={[windowWidth, windowHeight, 1]}
-          receiveShadow
-        >
-          {isActive ? (
-            <meshStandardMaterial
-              color={isLight ? '#f2f2f2' : '#e0e0e0'}
-              metalness={0.35}
-              roughness={0.1}
-              transparent
-              opacity={0.9}
-              emissive={isLight ? '#e0e0e0' : '#c0c0c0'}
-              emissiveIntensity={0.2}
-            />
-          ) : (
-            <meshStandardMaterial
-              color={windowColor}
-              emissive={windowEmissive}
-              emissiveIntensity={0.15}
-              metalness={0.15}
-              roughness={0.25}
-              transparent
-              opacity={0.7}
-            />
-          )}
-        </mesh>
-      ))}
+      <instancedMesh
+        key={windows.length}
+        ref={windowsRef}
+        args={[WINDOW_GEOMETRY, undefined, windows.length]}
+        receiveShadow
+      >
+        <meshStandardMaterial
+          color={isActive ? (isLight ? '#f2f2f2' : '#e0e0e0') : windowColor}
+          emissive={isActive ? (isLight ? '#e0e0e0' : '#c0c0c0') : windowEmissive}
+          emissiveIntensity={isActive ? 0.2 : 0.15}
+          metalness={isActive ? 0.35 : 0.15}
+          roughness={isActive ? 0.1 : 0.25}
+          transparent
+          opacity={isActive ? 0.9 : 0.7}
+        />
+      </instancedMesh>
 
       {ledgeYs.map((y, i) => (
         <mesh
           key={`l-${i}`}
           position={[0, y, 0]}
-          geometry={sharedLedgeGeo}
+          geometry={UNIT_BOX_GEOMETRY}
           scale={[width + 0.08, 0.06, depth + 0.08]}
           castShadow
           receiveShadow
@@ -465,7 +457,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
               opacity={isActive ? 1 : 0.8}
               anchorX={facingRoad > 0 ? 'right' : 'left'}
               anchorY="bottom"
-              fontWeight="bold"
               depthTest={false}
               renderOrder={10}
             >
@@ -478,56 +469,104 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   )
 })
 
+interface ActiveBuilding {
+  x: number
+  z: number
+  buildingHeight: number
+}
+
+/** Below this intensity the front light is too dim for a stale shadow map to be noticed. */
+const SHADOW_MIN_INTENSITY = 0.05
+
 function ActiveLights({
-  activeExpData,
+  active,
   isLight,
   enableShadows,
 }: {
-  activeExpData: any
+  active: ActiveBuilding | undefined
   isLight: boolean
   enableShadows: boolean
 }) {
+  const gl = useThree((state) => state.gl)
   const groupRef = useRef<THREE.Group>(null)
   const topLightRef = useRef<THREE.PointLight>(null)
   const frontLightRef = useRef<THREE.PointLight>(null)
   const logoLightRef = useRef<THREE.PointLight>(null)
 
-  useFrame((_, delta) => {
-    if (!groupRef.current) return
-    const targetX = activeExpData ? activeExpData.x : 0
-    const targetZ = activeExpData ? activeExpData.z : 0
-    
+  // Where the front light stood when its shadow map was last rendered.
+  const bakedAt = useRef(new THREE.Vector3(NaN, NaN, NaN))
+  const worldPosition = useRef(new THREE.Vector3())
+
+  useEffect(() => {
+    const canvas = gl.domElement
+    const forget = () => bakedAt.current.set(NaN, NaN, NaN)
+    canvas.addEventListener('webglcontextrestored', forget)
+    return () => canvas.removeEventListener('webglcontextrestored', forget)
+  }, [gl])
+
+  useFrame((state, delta) => {
+    const group = groupRef.current
+    if (!group) return
+    const targetX = active ? active.x : 0
+    const targetZ = active ? active.z : 0
+
+    // Clamped so a long frame (tab switch, shader compile) cannot overshoot the target.
+    const k = Math.min(5 * Math.min(delta, MAX_EASING_STEP), 1)
+
     // Smooth position interpolation
-    groupRef.current.position.x += (targetX - groupRef.current.position.x) * 5 * delta
-    groupRef.current.position.z += (targetZ - groupRef.current.position.z) * 5 * delta
+    group.position.x += (targetX - group.position.x) * k
+    group.position.z += (targetZ - group.position.z) * k
 
     // Smooth intensity interpolation
-    const targetIntensityTop = activeExpData ? (isLight ? 3 : 0.9) : 0
-    const targetIntensityFront = activeExpData ? (isLight ? 20.5 : 100) : 0
-    const targetIntensityLogo = activeExpData ? (isLight ? 2 : 4) : 0
+    const targetIntensityTop = active ? (isLight ? 3 : 0.9) : 0
+    const targetIntensityFront = active ? (isLight ? 20.5 : 100) : 0
+    const targetIntensityLogo = active ? (isLight ? 2 : 4) : 0
 
-    if (topLightRef.current) topLightRef.current.intensity += (targetIntensityTop - topLightRef.current.intensity) * 5 * delta
-    if (frontLightRef.current) frontLightRef.current.intensity += (targetIntensityFront - frontLightRef.current.intensity) * 5 * delta
-    if (logoLightRef.current) logoLightRef.current.intensity += (targetIntensityLogo - logoLightRef.current.intensity) * 5 * delta
+    if (topLightRef.current) topLightRef.current.intensity += (targetIntensityTop - topLightRef.current.intensity) * k
+    if (logoLightRef.current) logoLightRef.current.intensity += (targetIntensityLogo - logoLightRef.current.intensity) * k
+
+    const front = frontLightRef.current
+    if (front) {
+      front.intensity += (targetIntensityFront - front.intensity) * k
+
+      // The front light is by far the brightest of the three and all of them ease at the same
+      // rate, so it tells when the fade is over: keep frames coming until it is within 1% of its
+      // target and the group has arrived.
+      const fading = Math.abs(targetIntensityFront - front.intensity) > 0.01 * Math.max(targetIntensityFront, 1)
+      const travelling = Math.abs(targetX - group.position.x) > 0.01 || Math.abs(targetZ - group.position.z) > 0.01
+      if (fading || travelling) keepRendering(state)
+
+      // A point-light shadow costs six passes over the scene. Render it only while the light is
+      // on and has moved since the last time; three.js would otherwise redo it every frame, even
+      // while the light is off between two buildings.
+      if (front.castShadow) {
+        front.shadow.autoUpdate = false
+        if (front.intensity > SHADOW_MIN_INTENSITY) {
+          front.getWorldPosition(worldPosition.current)
+          const moved = !(worldPosition.current.distanceToSquared(bakedAt.current) < 1e-8)
+          if (moved) {
+            front.shadow.needsUpdate = true
+            bakedAt.current.copy(worldPosition.current)
+          }
+        }
+      }
+    }
   })
 
   // Fixed values to avoid erratic shadow/camera updates
-  const height = activeExpData ? activeExpData.buildingHeight : 10
-  const x = activeExpData ? activeExpData.x : 10
+  const height = active ? active.buildingHeight : 10
+  const x = active ? active.x : 10
 
   return (
     <group ref={groupRef}>
+      {/* The top and logo lights cast no shadow: they sit right above the roof, so their shadows
+          only fall on surfaces these weak lights barely reach, and each one cost six passes per
+          frame plus a shadow lookup in every lit pixel. */}
       <pointLight
         ref={topLightRef}
         position={[0, height + 3, 0]}
         color={'#ffffff'}
         intensity={0}
-        castShadow={enableShadows}
-        shadow-mapSize-width={512}
-        shadow-mapSize-height={512}
-        shadow-bias={-0.0005}
-        shadow-camera-near={0.5}
-        shadow-camera-far={25}
       />
       <pointLight
         ref={frontLightRef}
@@ -547,13 +586,12 @@ function ActiveLights({
         color={'#ffffff'}
         intensity={0}
         distance={12}
-        castShadow
       />
     </group>
   )
 }
 
-export function Buildings({ roadLength, experiences, activeExperienceId, theme, perf, onReady }: BuildingsProps) {
+export function Buildings({ roadLength, experiences, activeExperienceId, theme, perf }: BuildingsProps) {
   const isLight = theme === 'light'
   const instancedRef = useRef<THREE.InstancedMesh>(null)
   const { positions, scales, ledgeInstances, windowInstances } = useMemo(() => {
@@ -623,7 +661,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         const idx = i < row.count ? i : i - row.count
         const ri = i + row.seedOffset
         const w = row.wMin + rand(ri + 3) * row.wRange
-        let h = row.hMin + rand(ri + 4) * row.hRange
+        const h = row.hMin + rand(ri + 4) * row.hRange
         const d = row.dMin + rand(ri + 5) * row.dRange
 
         let placed = false
@@ -684,41 +722,25 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     return { positions, scales, ledgeInstances, windowInstances }
   }, [roadLength, experiences, perf.buildingCount])
 
-  const texture = useTexture([
-    '/textures/painted_plaster_wall_diff_1k.webp',
-    '/textures/painted_plaster_wall_nor_gl_1k.webp',
-    '/textures/painted_plaster_wall_rough_1k.webp',
-    '/textures/painted_plaster_wall_disp_1k.webp',
-  ])
-  texture.forEach((tex) => {
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(20, 20)
-  })
-  const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
+  const texture = usePlasterTextures()
   const material = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#e0e0e0',
         map: texture[0],
         normalMap: texture[1],
         roughnessMap: texture[2],
-        displacementMap: texture[3],
-        displacementScale: -0.01,
         roughness: 0.9,
         metalness: 0.05,
       }),
-    []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [texture[0], texture[1], texture[2]]
   )
 
-  const ledgeGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
-  const ledgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#222222' }), [])
+  const ledgeMaterial = useMemo(() => new THREE.MeshStandardMaterial(), [])
 
-  const windowGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
   const windowMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: isLight ? '#a0a0a0' : '#3a3a3a',
-        emissive: isLight ? '#0f0f0f' : '#0a0a0a',
         emissiveIntensity: 0.15,
         metalness: 0.25,
         roughness: 0.18,
@@ -728,12 +750,13 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     []
   )
 
-  useEffect(() => {
+  // Theme colours are plain uniforms: set them without flagging the materials for a rebuild.
+  // Layout effect so they are in place before the first frame.
+  useLayoutEffect(() => {
     material.color.set(isLight ? '#c8c8c8' : '#383838')
-    material.needsUpdate = true
     ledgeMaterial.color.set(isLight ? '#d8d8d8' : '#303030')
-    ledgeMaterial.needsUpdate = true
-    windowMaterial.needsUpdate = true
+    windowMaterial.color.set(isLight ? '#a0a0a0' : '#3a3a3a')
+    windowMaterial.emissive.set(isLight ? '#0f0f0f' : '#0a0a0a')
   }, [isLight, material, ledgeMaterial, windowMaterial])
 
   const dummy = useMemo(() => new THREE.Object3D(), [])
@@ -748,7 +771,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       const [x, y, z] = positions[i]
       const [sx, sy, sz] = scales[i]
       dummy.position.set(x, y, z)
-      dummy.scale.set(sx, sy, sz)
+      dummy.scale.set(sx, sy, sz).multiplyScalar(1 - 2 * PLASTER_INSET)
       dummy.rotation.set(0, 0, 0)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -821,15 +844,28 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
 
   const tickGeometry = useMemo(() => new THREE.PlaneGeometry(tickWidth, 0.06), [])
   const tickMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#444444', transparent: true, opacity: 0.3, depthTest: false }),
+    () => new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.3, depthTest: false }),
     []
   )
   const tickRef = useRef<THREE.InstancedMesh>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     tickMaterial.color.set(isLight ? '#161616' : '#444444')
-    tickMaterial.needsUpdate = true
   }, [isLight, tickMaterial])
+
+  useEffect(
+    () => () => {
+      material.dispose()
+      ledgeMaterial.dispose()
+      windowMaterial.dispose()
+      tickMaterial.dispose()
+      tickGeometry.dispose()
+    },
+    [material, ledgeMaterial, windowMaterial, tickMaterial, tickGeometry]
+  )
+
+  // The pyramids and the light on them never move: bake its six shadow passes once.
+  const pyramidLightRef = useStaticShadow<THREE.PointLight>()
 
   useEffect(() => {
     const mesh = tickRef.current
@@ -845,23 +881,18 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     mesh.instanceMatrix.needsUpdate = true
   }, [timelineTicks, dummy, tickX])
 
-  const readyFired = useRef(false)
-  useEffect(() => {
-    if (!readyFired.current && positions.length > 0) {
-      readyFired.current = true
-      onReady?.()
-    }
-  }, [positions, onReady])
-
   return (
     <group>
       {timelineTicks.length > 0 && (
         <instancedMesh ref={tickRef} args={[tickGeometry, tickMaterial, timelineTicks.length]} />
       )}
 
+      {/* Sized by the number of buildings actually placed. The former fixed capacity of
+          buildingCount * 12 was below the 12.4 * buildingCount the layout can produce. */}
       <instancedMesh
+        key={positions.length}
         ref={instancedRef}
-        args={[geometry, material, perf.buildingCount * 12]}
+        args={[UNIT_BOX_GEOMETRY, material, positions.length]}
         castShadow
         receiveShadow
         frustumCulled={false}
@@ -870,7 +901,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       {ledgeInstances.length > 0 && (
         <instancedMesh
           ref={ledgeRef}
-          args={[ledgeGeometry, ledgeMaterial, ledgeInstances.length]}
+          args={[UNIT_BOX_GEOMETRY, ledgeMaterial, ledgeInstances.length]}
           frustumCulled={false}
         />
       )}
@@ -878,14 +909,21 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       {windowInstances.length > 0 && (
         <instancedMesh
           ref={windowRef}
-          args={[windowGeometry, windowMaterial, windowInstances.length]}
+          args={[WINDOW_GEOMETRY, windowMaterial, windowInstances.length]}
           frustumCulled={false}
         />
       )}
 
       <group position={[0, 0, experiences[0] ? experiences[0].position * roadLength : 0]}>
         <GizaPyramids theme={theme} />
-        <pointLight position={[60, 25, 18]} color={isLight ? '#e0e0e0' : '#dddddd'} intensity={isLight ? 5 : 20} distance={60} castShadow />
+        <pointLight
+          ref={pyramidLightRef}
+          position={[60, 25, 18]}
+          color={isLight ? '#e0e0e0' : '#dddddd'}
+          intensity={isLight ? 5 : 20}
+          distance={60}
+          castShadow
+        />
       </group>
 
       <group position={[0, 0, experiences[4] ? experiences[4].position * roadLength : 0]}>
@@ -919,7 +957,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       })}
 
       <ActiveLights
-        activeExpData={expRenderData.find((d) => d.exp.id === activeExperienceId)}
+        active={expRenderData.find((d) => d.exp.id === activeExperienceId)}
         isLight={isLight}
         enableShadows={perf.buildingShadows}
       />
