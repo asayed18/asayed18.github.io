@@ -19,6 +19,8 @@ import {
   type FacadeStyle,
 } from './facade'
 import { useCityEnvironment } from './environment'
+import { CityGround } from './CityGround'
+import { bakeGroundAO } from './groundAO'
 import { EXPERIENCE_LATERAL, ROAD_LENGTH, roadFrame } from './path'
 import {
   generateCity,
@@ -195,11 +197,11 @@ const GizaPyramids = memo(function GizaPyramids({ pyramids, theme }: { pyramids:
   }, [stone])
   const sand = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 1 }), [])
   useLayoutEffect(() => {
-    material.color.set(isLight ? '#d2bd98' : '#6a5a44')
-    material.emissive.set(isLight ? '#000000' : '#2a2117')
+    material.color.set(isLight ? '#d2bd98' : '#b39c78')
+    material.emissive.set(isLight ? '#000000' : '#6b4f2c')
     material.emissiveMap = isLight ? null : stone
     material.needsUpdate = true
-    sand.color.set(isLight ? '#d9c9a8' : '#17130e')
+    sand.color.set(isLight ? '#d9c9a8' : '#8f8166')
   }, [isLight, material, sand, stone])
   useEffect(
     () => () => {
@@ -253,9 +255,9 @@ const BerlinTVTower = memo(function BerlinTVTower({ x, z, theme }: { x: number; 
   const shaftTop = sphereY - sphereR * 0.6
   const antennaBase = sphereY + sphereR + 7
 
-  const concrete = isLight ? '#b9b4ac' : '#4c4944'
-  const steel = isLight ? '#c3cad0' : '#66707a'
-  const nightGlow = isLight ? '#000000' : '#1c1f24'
+  const concrete = isLight ? '#b9b4ac' : '#a39d94'
+  const steel = isLight ? '#c3cad0' : '#a9b2bb'
+  const nightGlow = isLight ? '#000000' : '#262c36'
 
   return (
     <group position={[x, 0, z]}>
@@ -323,35 +325,35 @@ const Logo3D = memo(function Logo3D({
   const texture = useTexture(logoUrl)
   const groupRef = useRef<THREE.Group>(null)
 
-  useMemo(() => {
-    const img = texture.image
-    if (!img) return
-    const canvas = document.createElement('canvas')
-    canvas.width = img.width
-    canvas.height = img.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(img, 0, 0)
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
-    // White silhouette of the logo (its shape comes from the alpha channel): every logo then
-    // glows the same way on the dark lightbox, whatever its original colours.
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = 255
-      data[i + 1] = 255
-      data[i + 2] = 255
-    }
-    ctx.putImageData(imageData, 0, 0)
-    texture.image = canvas
+  // The logo keeps its own colours. Most are dark or saturated and stand on a white lightbox;
+  // a logo drawn in white (for dark backgrounds) gets a dark one instead.
+  const brightLogo = useMemo(() => {
+    const img = texture.image as CanvasImageSource & { width: number; height: number }
     texture.minFilter = THREE.LinearFilter
     texture.magFilter = THREE.LinearFilter
     texture.generateMipmaps = false
     texture.needsUpdate = true
+    if (!img) return false
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return false
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+    let sum = 0
+    let count = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue
+      sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
+      count++
+    }
+    return count > 0 && sum / count > 150
   }, [texture])
 
   const aspect = texture.image ? texture.image.width / texture.image.height : 2
 
-  // A backlit lightbox, as on real office towers: a dark panel with the logo glowing on it,
+  // A backlit lightbox, as on real office towers: the logo in its brand colours on a lit panel,
   // readable at night and in daylight, and brighter while the building is in focus.
   const signWidth = BUILDING_WIDTH * 0.95
   const signHeight = signWidth / Math.min(aspect, 3)
@@ -374,7 +376,8 @@ const Logo3D = memo(function Logo3D({
     groupRef.current.rotation.y = Math.atan2(dx, dz) - parentYaw
   })
 
-  const glow = isActive ? (isLight ? 1.1 : 1.6) : isLight ? 0.75 : 0.9
+  // Emissive below 1 keeps the brand colours from washing out to white in the bloom.
+  const glow = isActive ? (isLight ? 0.6 : 0.95) : isLight ? 0.45 : 0.75
   const face = (
     <meshStandardMaterial
       map={texture}
@@ -384,10 +387,15 @@ const Logo3D = memo(function Logo3D({
       color="#ffffff"
       transparent
       roughness={0.6}
-      depthTest={false}
+      depthWrite={false}
+      polygonOffset
+      polygonOffsetFactor={-2}
+      polygonOffsetUnits={-2}
       toneMapped={false}
     />
   )
+  const panelColor = brightLogo ? '#1c1c1e' : '#f3f0ea'
+  const panelGlow = brightLogo ? 0.02 : isLight ? (isActive ? 0.55 : 0.4) : isActive ? 0.55 : 0.4
 
   return (
     <group>
@@ -402,10 +410,10 @@ const Logo3D = memo(function Logo3D({
         <mesh castShadow renderOrder={10}>
           <boxGeometry args={[signWidth + 0.4, signHeight + 0.4, depth]} />
           <meshStandardMaterial
-            color={isLight ? '#1e1e1e' : '#0c0c0c'}
+            color={panelColor}
             emissive="#ffffff"
-            emissiveIntensity={isActive ? 0.06 : 0.02}
-            metalness={0.3}
+            emissiveIntensity={panelGlow}
+            metalness={0.1}
             roughness={0.4}
           />
         </mesh>
@@ -443,7 +451,7 @@ const RoadDateMarking = memo(function RoadDateMarking({
           color={isActive ? (isLight ? '#444444' : '#5a5a5a') : (isLight ? '#777777' : '#555555')}
           transparent
           opacity={isActive ? 0.9 : 0.4}
-          depthTest={false}
+          depthWrite={false}
         />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[4.5, 0, 0]}>
@@ -452,7 +460,7 @@ const RoadDateMarking = memo(function RoadDateMarking({
           color={isActive ? (isLight ? '#444444' : '#5a5a5a') : (isLight ? '#777777' : '#555555')}
           transparent
           opacity={isActive ? 0.9 : 0.4}
-          depthTest={false}
+          depthWrite={false}
         />
       </mesh>
 
@@ -510,10 +518,10 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   useEffect(() => () => material.dispose(), [material])
 
   // In focus: a step brighter than its neighbours, never blown out to pure white.
-  const bodyColor = isActive ? (isLight ? '#e9dfcf' : '#6e665c') : (isLight ? '#d3cbbf' : '#1a1815')
-  const bodyEmissive = isActive ? (isLight ? '#000000' : '#221e19') : '#000000'
+  const bodyColor = isActive ? (isLight ? '#e9dfcf' : '#d6ccbb') : isLight ? '#d3cbbf' : '#a39b8f'
+  const bodyEmissive = isActive ? (isLight ? '#000000' : '#2a241c') : '#000000'
   const labelColor = isActive ? (isLight ? '#e8e8e8' : '#c0c0c0') : (isLight ? '#cccccc' : '#5a5a5a')
-  const ledgeColor = isActive ? (isLight ? '#f2ece2' : '#4d4740') : (isLight ? '#d8d1c6' : '#1d1b18')
+  const ledgeColor = isActive ? (isLight ? '#f2ece2' : '#c9c0b2') : isLight ? '#d8d1c6' : '#9a9387'
 
   useLayoutEffect(() => {
     material.envMap = envMap
@@ -567,8 +575,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
               opacity={isActive ? 1 : 0.8}
               anchorX={facingRoad > 0 ? 'right' : 'left'}
               anchorY="bottom"
-              depthTest={false}
-              renderOrder={10}
+                            renderOrder={10}
             >
               {String(startYear + floor)}
             </CanvasText>
@@ -711,7 +718,11 @@ function ActiveLights({
 
 export function Buildings({ experiences, activeExperienceId, theme, perf }: BuildingsProps) {
   const isLight = theme === 'light'
-  const city = useMemo(() => generateCity(experiences, DENSITY[perf.tier]), [experiences, perf.tier])
+  const city = useMemo(() => {
+    const layout = generateCity(experiences, DENSITY[perf.tier])
+    bakeGroundAO(layout)
+    return layout
+  }, [experiences, perf.tier])
 
   const envMap = useCityEnvironment()
   const facade = useMemo(() => createFacadeUniforms(), [])
@@ -728,11 +739,11 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
   // Theme colours are plain uniforms: set them without flagging the materials for a rebuild.
   // Layout effect so they are in place before the first frame.
   useLayoutEffect(() => {
-    material.color.set(isLight ? '#d2d2d2' : '#3a3a3a')
-    ledgeMaterial.color.set(isLight ? '#e2ddd4' : '#35322e')
-    railingMaterial.color.set(isLight ? '#8a8a8a' : '#202020')
-    awningMaterial.color.set(isLight ? '#8f6f62' : '#2a211d')
-    material.envMapIntensity = isLight ? 0.8 : 0.35
+    material.color.set(isLight ? '#d2d2d2' : '#a8a8a8')
+    ledgeMaterial.color.set(isLight ? '#e2ddd4' : '#b3aca1')
+    railingMaterial.color.set(isLight ? '#8a8a8a' : '#5c5c5c')
+    awningMaterial.color.set(isLight ? '#8f6f62' : '#7d6054')
+    material.envMapIntensity = isLight ? 0.8 : 0.5
     setFacadeTheme(facade, isLight)
   }, [isLight, material, ledgeMaterial, railingMaterial, awningMaterial, facade])
 
@@ -832,6 +843,8 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
       <BoxInstances boxes={city.balconies} material={ledgeMaterial} castShadow />
       <BoxInstances boxes={city.railings} material={railingMaterial} />
       <BoxInstances boxes={city.awnings} material={awningMaterial} castShadow />
+
+      <CityGround streets={city.streets} parks={city.parks} crossings={city.crossings} trees={city.trees} theme={theme} />
 
       <GizaPyramids pyramids={city.pyramids} theme={theme} />
       {city.tower && <BerlinTVTower x={city.tower.x} z={city.tower.z} theme={theme} />}

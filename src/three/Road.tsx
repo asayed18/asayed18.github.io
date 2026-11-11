@@ -6,6 +6,7 @@ import { ROAD_WIDTH } from './config'
 import { useCityEnvironment } from './environment'
 import { ROAD_LEAD_IN, ROAD_LEAD_OUT, ROAD_LENGTH } from './path'
 import { sweepProfile } from './sweep'
+import { groundAOCompile, groundAOKey } from './groundAO'
 
 interface RoadProps {
   theme: Theme
@@ -55,18 +56,25 @@ export function Road({ theme }: RoadProps) {
           fog fades out, so the world has no visible edge. */}
       <mesh position={[0, ROAD_Y - 0.02, 160]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
-        <meshStandardMaterial color={isLight ? '#b9b3a8' : '#0c0b0a'} roughness={0.95} />
+        <meshStandardMaterial
+          color={isLight ? '#aaa69e' : '#5f5c57'}
+          roughness={0.95}
+          onBeforeCompile={groundAOCompile}
+          customProgramCacheKey={groundAOKey}
+        />
       </mesh>
       <mesh geometry={geometry} receiveShadow>
         <meshStandardMaterial
           map={texture[0]}
           normalMap={texture[1]}
           roughnessMap={texture[2]}
-          color={isLight ? '#ffffff' : '#2a2a2a'}
+          color={isLight ? '#ffffff' : '#8c8c8c'}
           envMap={envMap}
           envMapIntensity={isLight ? 0.15 : 0.35}
           roughness={isLight ? 0.85 : 0.6}
           metalness={isLight ? 0.05 : 0.2}
+          onBeforeCompile={groundAOCompile}
+          customProgramCacheKey={groundAOKey}
         />
       </mesh>
     </>

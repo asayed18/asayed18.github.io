@@ -169,6 +169,8 @@ const FRAGMENT_MAP = /* glsl */ `
 #include <map_fragment>
 float facadeGlass = 0.0;
 float facadeLit = 0.0;
+// Less sky reaches the foot of a wall in a street canyon (what a baked GI pass would show).
+float facadeAO = 1.0;
 {
   vec3 n = normalize(vFacadeNormal);
   float seed = facadeHash(vFacadeCenter.xz);
@@ -259,6 +261,7 @@ float facadeLit = 0.0;
     diffuseColor.rgb *= mix(1.0, uFrameTone, frame) * grime * wall;
     diffuseColor.rgb = mix(diffuseColor.rgb, uGlassColor * recess * tint, glass);
     facadeGlass = glass;
+    facadeAO = mix(0.42, 1.0, smoothstep(0.0, 11.0, y));
   } else if (n.y > 0.5) {
     // Roof: gravel tone and a lighter parapet coping along the edges.
     vec2 edge = vFacadeHalf.xz - abs(vFacadeLocal.xz);
@@ -268,6 +271,13 @@ float facadeLit = 0.0;
   }
 }
 `.replace('${PARAPET}', PARAPET_HEIGHT.toFixed(2))
+
+const FRAGMENT_AO = /* glsl */ `
+#include <aomap_fragment>
+reflectedLight.indirectDiffuse *= facadeAO;
+reflectedLight.indirectSpecular *= mix(1.0, facadeAO, 0.6);
+reflectedLight.directDiffuse *= mix(1.0, facadeAO, 0.25);
+`
 
 const FRAGMENT_ROUGHNESS = /* glsl */ `
 #include <roughnessmap_fragment>
@@ -300,8 +310,9 @@ export function applyFacade(material: THREE.MeshStandardMaterial, uniforms: Faca
         .replace('#include <roughnessmap_fragment>', FRAGMENT_ROUGHNESS)
         .replace('#include <metalnessmap_fragment>', FRAGMENT_METALNESS)
         .replace('#include <emissivemap_fragment>', FRAGMENT_EMISSIVE)
+        .replace('#include <aomap_fragment>', FRAGMENT_AO)
   }
   // Same code for every facade material: one program per variant (instanced or not).
-  material.customProgramCacheKey = () => 'facade-v3'
+  material.customProgramCacheKey = () => 'facade-v4'
   material.needsUpdate = true
 }

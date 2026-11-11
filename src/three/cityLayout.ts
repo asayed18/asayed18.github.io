@@ -70,6 +70,27 @@ export interface ExperiencePlacement {
   height: number
 }
 
+/** A flat rectangle on the ground: a stretch of side street, a park lawn. */
+export interface GroundPatch {
+  x: number
+  z: number
+  /** Rotation around y; `length` runs along local z. */
+  yaw: number
+  width: number
+  length: number
+}
+
+export interface Tree {
+  x: number
+  z: number
+  /** Height of the trunk up to where the crown starts. */
+  trunk: number
+  /** Radius of the crown. */
+  crown: number
+  /** 0 to 1: picks the shade of green. */
+  tone: number
+}
+
 export interface CityLayout {
   near: BuildingSpec[]
   far: BuildingSpec[]
@@ -80,6 +101,12 @@ export interface CityLayout {
   pyramids: Pyramid[]
   tower: { x: number; z: number } | null
   experiences: ExperiencePlacement[]
+  /** Side streets of the grid, running into the avenue. */
+  streets: GroundPatch[]
+  /** Zebra stripes on the avenue where a side street meets it. */
+  crossings: DetailBox[]
+  parks: GroundPatch[]
+  trees: Tree[]
 }
 
 /** Height of the Fernsehturm model, base to antenna tip. */
@@ -392,6 +419,105 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
     return b
   }
 
+  // --- The street grid ------------------------------------------------------------------------------
+  // Blocks of 24 x 32 units between 6 unit streets. The cross streets (along x) run all the way
+  // into the avenue, cutting the street wall as real side streets do; the streets along z stop
+  // where the blocks lining the avenue begin. Streets are reserved before anything is built.
+  const reach = density.skylineReach
+  const BLOCK_X = 24
+  const BLOCK_Z = 32
+  const STREET = 6
+  const pitchX = BLOCK_X + STREET
+  const pitchZ = BLOCK_Z + STREET
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const p of road) {
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+    minZ = Math.min(minZ, p.z)
+    maxZ = Math.max(maxZ, p.z)
+  }
+  // Shift the grid along z so no cross street runs into an experience building.
+  let gridZ = 0
+  let bestClearance = -1
+  for (let o = 0; o < pitchZ; o++) {
+    let clearance = Infinity
+    for (const pl of placements) {
+      const m = (((pl.z - o - BLOCK_Z - STREET / 2) % pitchZ) + pitchZ) % pitchZ
+      clearance = Math.min(clearance, Math.min(m, pitchZ - m))
+    }
+    if (clearance > bestClearance) {
+      bestClearance = clearance
+      gridZ = o
+    }
+  }
+  const gridX0 = Math.floor((minX - reach) / pitchX) * pitchX
+  const gridZ0 = Math.floor(Math.max(minZ - reach, -60) / pitchZ) * pitchZ + gridZ - pitchZ
+  const nearZone = FRONT + 32
+
+  const streets: GroundPatch[] = []
+  const streetLots: Footprint[] = []
+  const inClearing = (x: number, z: number, pad: number) => clearings.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + pad)
+  const nearPlaza = (x: number, z: number) => placements.some((pl) => Math.hypot(x - pl.x, z - pl.z) < 9.5)
+  /** Lays a street along a line in chunks, keeping the stretches that pass `keep`. */
+  const layStreet = (x0: number, z0: number, dx: number, dz: number, length: number, keep: (x: number, z: number, dist: number) => boolean) => {
+    const CHUNK = 3
+    const yaw = Math.atan2(dx, dz)
+    let start = -1
+    const flush = (end: number) => {
+      if (start < 0) return
+      const mid = (start + end) / 2
+      const len = end - start
+      const x = x0 + dx * mid
+      const z = z0 + dz * mid
+      streets.push({ x, z, yaw, width: STREET, length: len })
+      const fp = Lots.make(x, z, yaw, STREET, len)
+      lots.add(fp)
+      streetLots.push(fp)
+      start = -1
+    }
+    for (let t = 0; t < length; t += CHUNK) {
+      const x = x0 + dx * (t + CHUNK / 2)
+      const z = z0 + dz * (t + CHUNK / 2)
+      const dist = nearestRoad(x, z).dist
+      const ok = dist <= reach && dist > ROAD_WIDTH / 2 + 0.5 && keep(x, z, dist) && !inClearing(x, z, 3) && !nearPlaza(x, z)
+      if (ok && start < 0) start = t
+      if (!ok) flush(t)
+    }
+    flush(length)
+  }
+  const spanX = maxX + reach - gridX0
+  const spanZ = maxZ + reach - gridZ0
+  const crossStreetZs: number[] = []
+  for (let bz = gridZ0; bz <= maxZ + reach; bz += pitchZ) {
+    const z = bz + BLOCK_Z + STREET / 2
+    if (z < -50) continue
+    crossStreetZs.push(z)
+    layStreet(gridX0, z, 1, 0, spanX, () => true)
+  }
+  for (let bx = gridX0; bx <= maxX + reach; bx += pitchX) {
+    const x = bx + BLOCK_X + STREET / 2
+    layStreet(x, Math.max(gridZ0, -50), 0, 1, spanZ, (_x, _z, dist) => dist > nearZone)
+  }
+
+  // Zebra crossings on the avenue, just before each junction with a cross street.
+  const crossings: DetailBox[] = []
+  for (const z of crossStreetZs) {
+    for (let i = 1; i < road.length; i++) {
+      const a = road[i - 1]
+      const b = road[i]
+      if ((a.z - z) * (b.z - z) > 0) continue
+      const d = -ROAD_LEAD_IN + (i - 1) * 2 - (STREET / 2 + 2.5)
+      if (d < 2 - ROAD_LEAD_IN || placements.some((pl) => Math.abs(pl.distance - d) < 14)) continue
+      const f = roadFrame(d)
+      for (let l = -ROAD_WIDTH / 2 + 0.9; l <= ROAD_WIDTH / 2 - 0.8; l += 0.9) {
+        crossings.push({ pos: [f.point.x + f.left.x * l, -0.026, f.point.z + f.left.z * l], scale: [0.45, 0.01, 2.6], yaw: f.yaw })
+      }
+    }
+  }
+
   // --- Street wall ---------------------------------------------------------------------------------
   const frontage: { b: BuildingSpec; side: number }[] = []
   for (const side of [1, -1]) {
@@ -405,8 +531,8 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
       const floors = 3 + Math.floor(rnd() * 4)
       const b = place(near, x, z, f.yaw, across, along, floors, true)
       if (b) frontage.push({ b, side })
-      // Side streets now and then.
-      d += along + (rnd() < 0.12 ? 3.5 : 0.05)
+      // Wall to wall; past a side street or a plaza, try again a metre further on.
+      d += b ? along + 0.05 : 1
     }
   }
 
@@ -428,44 +554,43 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
         const downtown = noise2(x / 70, z / 70)
         const span = row.floors[1] - row.floors[0]
         const floors = row.floors[0] + Math.floor(rnd() * span * (0.4 + downtown))
-        // An empty lot now and then: a square, a car park.
-        if (rnd() > 0.04) place(near, x, z, f.yaw + (rnd() - 0.5) * 0.06, across, along, floors, true)
-        d += along + 0.4 + rnd() * 1.2
+        const b = place(near, x, z, f.yaw + (rnd() - 0.5) * 0.06, across, along, floors, true)
+        d += b ? along + 0.3 + rnd() * 0.6 : 1
       }
     }
   }
 
-  // --- The rest of the city: a street grid of full blocks -----------------------------------------
-  // Real cities are not scattered boxes: blocks of 24 x 32 units between 6 unit streets, each
-  // block divided into lots built wall to wall. Heights follow districts (low-rise quarters, a
-  // couple of downtowns with towers) and change little from one lot to its neighbour.
-  const reach = density.skylineReach
-  const BLOCK_X = 24
-  const BLOCK_Z = 32
-  const STREET = 6
+  // --- The rest of the city: full blocks on the street grid -----------------------------------------
+  // Real cities are not scattered boxes: each block is divided into lots built wall to wall.
+  // Heights follow districts (low-rise quarters, a couple of downtowns with towers) and change
+  // little from one lot to its neighbour. Now and then a block is a park.
   const split = density.lotsPerBlock
-  let minX = Infinity
-  let maxX = -Infinity
-  let minZ = Infinity
-  let maxZ = -Infinity
-  for (const p of road) {
-    minX = Math.min(minX, p.x)
-    maxX = Math.max(maxX, p.x)
-    minZ = Math.min(minZ, p.z)
-    maxZ = Math.max(maxZ, p.z)
+  const parks: GroundPatch[] = []
+  const trees: Tree[] = []
+  const addTree = (x: number, z: number, scale = 1) => {
+    trees.push({ x, z, trunk: (1.6 + rnd() * 1.2) * scale, crown: (1.3 + rnd() * 0.9) * scale, tone: rnd() })
   }
-  const pitchX = BLOCK_X + STREET
-  const pitchZ = BLOCK_Z + STREET
   // Nothing behind the start: the camera never looks back there.
-  for (let bx = Math.floor((minX - reach) / pitchX) * pitchX; bx <= maxX + reach; bx += pitchX) {
-    for (let bz = Math.floor(Math.max(minZ - reach, -60) / pitchZ) * pitchZ; bz <= maxZ + reach; bz += pitchZ) {
+  for (let bx = gridX0; bx <= maxX + reach; bx += pitchX) {
+    for (let bz = gridZ0; bz <= maxZ + reach; bz += pitchZ) {
       const cx = bx + BLOCK_X / 2
       const cz = bz + BLOCK_Z / 2
+      if (cz < -60) continue
       const blockDist = nearestRoad(cx, cz).dist
       if (blockDist > reach + 20 || blockDist < FRONT) continue
       const district = noise2(cx / 110, cz / 110)
       const downtown = Math.max(0, district - 0.55) / 0.45
       const blockFloors = 4 + Math.floor(district * 7 + rnd() * 3)
+      if (blockDist > nearZone && blockDist < 150 && heightCap(cx, cz, 20) > 0 && rnd() < 0.08 * (1 - downtown)) {
+        const fp = Lots.make(cx, cz, 0, BLOCK_X - 0.4, BLOCK_Z - 0.4)
+        if (!lots.overlaps(fp)) {
+          lots.add(fp)
+          parks.push({ x: cx, z: cz, yaw: 0, width: BLOCK_X - 0.4, length: BLOCK_Z - 0.4 })
+          const count = 10 + Math.floor(rnd() * 8)
+          for (let i = 0; i < count; i++) addTree(cx + (rnd() - 0.5) * (BLOCK_X - 4), cz + (rnd() - 0.5) * (BLOCK_Z - 4), 1.2)
+          continue
+        }
+      }
       // A tower takes a whole block now and then, more often downtown.
       if (rnd() < 0.04 + 0.35 * downtown) {
         const floors = 16 + Math.floor(rnd() * 14 + downtown * 16)
@@ -508,6 +633,74 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
           const floors = Math.max(2, blockFloors + Math.floor((rnd() - 0.5) * 4) + (rnd() < 0.08 ? 6 : 0))
           place(dist < 60 ? near : far, x, z, 0, lw - 0.3, ld - 0.3, floors, dist < FRONT + 30)
         }
+      }
+    }
+  }
+
+  // --- Infill: close the leftover gaps near the avenue ------------------------------------------------
+  // Where the rows along the curve meet the straight grid, odd-shaped gaps remain. Fill them with
+  // smaller buildings, as a real city fills every leftover lot; now and then a pocket park.
+  const INFILL = 3
+  const infillReach = 75
+  const probe = (x: number, z: number) => lots.overlaps(Lots.make(x, z, 0, 0.6, 0.6), 0)
+  for (let x = minX - infillReach; x <= maxX + infillReach; x += INFILL) {
+    for (let z = Math.max(minZ - infillReach, -40); z <= maxZ + infillReach; z += INFILL) {
+      const jx = x + (hash(x * 3.1 + z * 7.7) - 0.5) * 1.2
+      const jz = z + (hash(x * 5.3 - z * 2.9) - 0.5) * 1.2
+      const nr = nearestRoad(jx, jz)
+      if (nr.dist < FRONT + 1 || nr.dist > infillReach || nr.beyondEnd || probe(jx, jz)) continue
+      const yaw = nr.dist < nearZone + 4 ? nr.yaw : 0
+      const district = noise2(jx / 110, jz / 110)
+      if (rnd() < 0.025 && nr.dist > FRONT + 12) {
+        const fp = Lots.make(jx, jz, yaw, 8, 8)
+        if (!lots.overlaps(fp) && heightCap(jx, jz, 6) > 0) {
+          lots.add(fp)
+          parks.push({ x: jx, z: jz, yaw, width: 8, length: 8 })
+          for (let i = 0; i < 4; i++) addTree(jx + (rnd() - 0.5) * 5, jz + (rnd() - 0.5) * 5)
+          continue
+        }
+      }
+      const floors = 3 + Math.floor(district * 6 + rnd() * 3)
+      const list = nr.dist < 60 ? near : far
+      for (const [w, d] of [
+        [7, 8],
+        [5, 6],
+        [3.6, 4],
+      ]) {
+        if (place(list, jx, jz, yaw, w, d, floors, nr.dist < FRONT + 16)) break
+      }
+    }
+  }
+
+  // --- Street trees ------------------------------------------------------------------------------------
+  const treeClear = (x: number, z: number) => {
+    const fp = Lots.make(x, z, 0, 0.8, 0.8)
+    return !inClearing(x, z, 2) && !streetLots.some((s) => intersects(fp, s, 1))
+  }
+  // Along the avenue, on both sidewalks halfway between the lamps; none in front of the five
+  // buildings the camera stops at.
+  for (const side of [1, -1]) {
+    const first = (side === 1 ? 13 : 6) - ROAD_LEAD_IN
+    for (let d = first; d < ROAD_LENGTH + ROAD_LEAD_OUT - 4; d += 14) {
+      if (placements.some((pl) => Math.abs(pl.distance - d) < 11)) continue
+      const f = roadFrame(d)
+      const x = f.point.x + f.left.x * side * (ROAD_WIDTH / 2 + 1.35)
+      const z = f.point.z + f.left.z * side * (ROAD_WIDTH / 2 + 1.35)
+      if (!treeClear(x, z)) continue
+      trees.push({ x, z, trunk: 2.1 + rnd() * 0.5, crown: 1.25 + rnd() * 0.35, tone: rnd() })
+    }
+  }
+  // Along the side streets near the avenue.
+  for (const s of streets) {
+    const ax = Math.sin(s.yaw)
+    const az = Math.cos(s.yaw)
+    for (let t = -s.length / 2 + 4; t < s.length / 2 - 3; t += 8) {
+      for (const lat of [-2.25, 2.25]) {
+        const x = s.x + ax * t + az * lat
+        const z = s.z + az * t - ax * lat
+        const dist = nearestRoad(x, z).dist
+        if (dist < FRONT + 2 || dist > 90 || inClearing(x, z, 2) || rnd() < 0.2) continue
+        trees.push({ x, z, trunk: 1.8 + rnd() * 0.6, crown: 1.0 + rnd() * 0.3, tone: rnd() })
       }
     }
   }
@@ -573,6 +766,20 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
     }
   }
 
-  return { near, far, cornices, balconies, railings, awnings, pyramids, tower, experiences: placements }
+  return {
+    near,
+    far,
+    cornices,
+    balconies,
+    railings,
+    awnings,
+    pyramids,
+    tower,
+    experiences: placements,
+    streets,
+    crossings,
+    parks,
+    trees,
+  }
 }
 

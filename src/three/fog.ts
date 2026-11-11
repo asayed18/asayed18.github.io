@@ -11,7 +11,7 @@ import * as THREE from 'three'
  * landmarks use it so they stay half-visible far away).
  */
 /** Colour of the haze at the horizon; the sky fades into the same colour as the fog. */
-export const SKY_HAZE = { light: '#e2ded6', dark: '#151c28' }
+export const SKY_HAZE = { light: '#e2ded6', dark: '#18223a' }
 
 let installed = false
 
@@ -57,7 +57,7 @@ export function installAtmosphere(): void {
   #ifdef FOG_EXP2
     float fogFactor = 1.0 - exp( - fogDensity * fogDensity * fogD * fogD );
     // Ground mist: grows with distance, fades out over the first few storeys.
-    float mist = ( 1.0 - exp( - fogD * fogDensity * 1.8 ) ) * exp( - max( vFogHeight, 0.0 ) / 11.0 ) * 0.6;
+    float mist = ( 1.0 - exp( - fogD * fogDensity * 3.2 ) ) * exp( - max( vFogHeight, 0.0 ) / 6.5 ) * 0.85;
     fogFactor = 1.0 - ( 1.0 - fogFactor ) * ( 1.0 - mist );
   #else
     float fogFactor = smoothstep( fogNear, fogFar, fogD );

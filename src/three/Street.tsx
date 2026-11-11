@@ -4,6 +4,7 @@ import type { Theme } from '../theme'
 import { ROAD_WIDTH, SIDEWALK_WIDTH } from './config'
 import { ROAD_LEAD_IN, ROAD_LEAD_OUT, ROAD_LENGTH, roadFrame } from './path'
 import { sweepProfile } from './sweep'
+import { groundAOCompile, groundAOKey } from './groundAO'
 
 /** Distance between two street lamps on the same side. */
 const LAMP_SPACING = 14
@@ -90,7 +91,10 @@ export const Street = memo(function Street({ theme }: StreetProps) {
 
   const materials = useMemo(
     () => ({
-      sidewalk: new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+      sidewalk: Object.assign(new THREE.MeshStandardMaterial({ roughness: 0.95 }), {
+        onBeforeCompile: groundAOCompile,
+        customProgramCacheKey: groundAOKey,
+      }),
       paint: new THREE.MeshStandardMaterial({ roughness: 0.7, transparent: true, opacity: 0.55 }),
       metal: new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.6 }),
       head: new THREE.MeshStandardMaterial({ roughness: 0.3 }),
@@ -114,9 +118,9 @@ export const Street = memo(function Street({ theme }: StreetProps) {
   )
 
   useLayoutEffect(() => {
-    materials.sidewalk.color.set(isLight ? '#d6d1c8' : '#1e1c1a')
-    materials.paint.color.set(isLight ? '#f4f1ea' : '#8c8778')
-    materials.metal.color.set(isLight ? '#4f5458' : '#26292c')
+    materials.sidewalk.color.set(isLight ? '#d6d1c8' : '#9d988f')
+    materials.paint.color.set(isLight ? '#f4f1ea' : '#bdb8aa')
+    materials.metal.color.set(isLight ? '#4f5458' : '#4a4f54')
     materials.head.color.set(isLight ? '#e6e6e6' : '#ffffff')
     // Warm sodium-white street light at night.
     materials.head.emissive.set(isLight ? '#000000' : '#ffd9a0')

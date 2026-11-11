@@ -196,10 +196,10 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
   // Layout effect: the uniforms must hold the theme colours before the first frame is drawn.
   useLayoutEffect(() => {
     const isLight = theme === 'light'
-    material.uniforms.topColor.value.set(isLight ? '#7d9bba' : '#03060c')
+    material.uniforms.topColor.value.set(isLight ? '#7d9bba' : '#060d1f')
     material.uniforms.bottomColor.value.set(isLight ? SKY_HAZE.light : SKY_HAZE.dark)
     material.uniforms.celestialDir.value.copy(isLight ? SUN_DIR : MOON_DIR)
-    material.uniforms.moonHighlight.value.set(isLight ? '#f3dfbf' : '#2c3850')
+    material.uniforms.moonHighlight.value.set(isLight ? '#f3dfbf' : '#3a4c70')
     innerMaterial.uniforms.topColor.value.copy(material.uniforms.topColor.value)
     innerMaterial.uniforms.bottomColor.value.copy(material.uniforms.bottomColor.value)
   }, [theme, material, innerMaterial])
