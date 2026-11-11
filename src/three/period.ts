@@ -17,8 +17,9 @@ export function parsePeriodMonths(period: string): number {
   return Math.max(months, 1)
 }
 
-const MIN_HEIGHT = 4
-const MAX_HEIGHT = 16
+// Stands out from the 3 to 6 storey street wall around it.
+const MIN_HEIGHT = 9
+const MAX_HEIGHT = 28
 
 /** Building height for a tenure: 6 months or less is the minimum height, 48 months or more the maximum. */
 export function monthsToHeight(months: number): number {
