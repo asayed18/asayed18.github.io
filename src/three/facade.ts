@@ -336,6 +336,10 @@ float facadeAO = 1.0;
       : isShop ? vec3(0.86, 0.84, 0.8)
       : rh2.y < 0.5 ? vec3(0.86, 0.82, 0.74) : rh2.y < 0.7 ? vec3(0.7, 0.76, 0.8) : rh2.y < 0.85 ? vec3(0.74, 0.78, 0.68) : vec3(0.8, 0.62, 0.5);
 
+    // Far away a window is a few pixels. Detail smaller than a pixel flickers as the camera moves
+    // (and bloom turns each bright speck into a flash), so it fades to the room's average early.
+    float lod = smoothstep(0.035, 0.14, max(aa.x, aa.y));
+
     // Follow the ray to the first wall, floor or ceiling of that room.
     vec3 ro = vec3((id.x + g.x - roomIdx * span) * colW, g.y * floorH, 0.0);
     float tx = abs(du) > 1e-4 ? (du > 0.0 ? W - ro.x : -ro.x) / du : 1e5;
@@ -384,7 +388,7 @@ float facadeAO = 1.0;
     float modeMean = 0.8;
     if (isOffice || isShop) {
       float panels = hitCeil ? band(0.2, 0.8, fract(hit.x / 1.3), 0.04) * band(0.12, 0.88, fract(hit.z / 1.7), 0.04) : 0.0;
-      lightTerm = vec3(0.75 + 3.2 * panels) * (0.6 + 0.4 * exp(-hit.z * 0.12));
+      lightTerm = vec3(0.75 + 2.0 * panels * (1.0 - lod)) * (0.6 + 0.4 * exp(-hit.z * 0.12));
     } else {
       vec3 toMain = hit - vec3(W * 0.5, H - 0.3, D * 0.5);
       vec3 toLamp = hit - vec3(W * (0.2 + 0.6 * rh2.z), 0.95, D * 0.8);
@@ -411,8 +415,6 @@ float facadeAO = 1.0;
     vec3 dayIn = uDaylight * vec3(0.92, 0.96, 1.0) * (0.15 + 0.85 * exp(-hit.z * 0.55));
     vec3 interior = albedo * (lightTerm * lamp + dayIn);
     vec3 roomGlow = paint * modeColor * lamp * modeMean;
-    // Far away a window is a few pixels: show the room's average instead of its detail.
-    float lod = smoothstep(0.1, 0.3, max(aa.x, aa.y));
     interior = mix(interior, roomGlow + paint * uDaylight * 0.4, lod);
 
     // Curtains and blinds, at the glass. They hide the room and glow when it is lit.
@@ -577,6 +579,6 @@ export function applyFacade(material: THREE.MeshStandardMaterial, uniforms: Faca
         .replace('#include <aomap_fragment>', FRAGMENT_AO)
   }
   // Same code for every facade material: one program per variant (instanced or not).
-  material.customProgramCacheKey = () => 'facade-v6'
+  material.customProgramCacheKey = () => 'facade-v7'
   material.needsUpdate = true
 }
