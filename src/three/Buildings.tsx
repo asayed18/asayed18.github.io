@@ -99,8 +99,9 @@ interface BuildingsProps {
 /* Giza Pyramids landmark (far behind the first experience building) */
 const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const stoneColor = isLight ? '#222222' : '#0a0a0a'
-  const stoneEmissive = isLight ? '#111111' : '#050505'
+  // Moonlit stone at night: dark, but clearly lighter than the night sky behind it.
+  const stoneColor = isLight ? '#222222' : '#3a3a3a'
+  const stoneEmissive = isLight ? '#111111' : '#1c1c1c'
 
   const pyramids: { x: number; z: number; height: number; radius: number }[] = [
     { x: 50, z: -59, height: 20, radius: 20 },
@@ -133,8 +134,8 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
 /* Berlin Fernsehturm (TV Tower) landmark behind the fifth experience */
 const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const towerColor = isLight ? '#333333' : '#080808'
-  const towerEmissive = isLight ? '#222222' : '#050505'
+  const towerColor = isLight ? '#333333' : '#3a3a3a'
+  const towerEmissive = isLight ? '#222222' : '#1e1e1e'
 
   const shaftHeight = 40
   const shaftRadiusBottom = 2.2
@@ -176,6 +177,12 @@ const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
         />
       </mesh>
 
+      {/* Aviation light on the tip: marks the tower against the night sky. */}
+      <mesh position={[0, antennaY + antennaHeight / 2 + 0.3, 0]}>
+        <sphereGeometry args={[0.45, 8, 6]} />
+        <meshBasicMaterial color={isLight ? '#555555' : '#ffffff'} toneMapped={false} />
+      </mesh>
+
       <mesh position={[0, antennaY, 0]}>
         <cylinderGeometry args={[0.15, 0.4, antennaHeight, 6]} />
         <meshStandardMaterial
@@ -212,11 +219,12 @@ const Logo3D = memo(function Logo3D({
     ctx.drawImage(img, 0, 0)
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const data = imageData.data
+    // White silhouette of the logo (its shape comes from the alpha channel): every logo then
+    // glows the same way on the dark lightbox, whatever its original colours.
     for (let i = 0; i < data.length; i += 4) {
-      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
-      data[i] = gray
-      data[i + 1] = gray
-      data[i + 2] = gray
+      data[i] = 255
+      data[i + 1] = 255
+      data[i + 2] = 255
     }
     ctx.putImageData(imageData, 0, 0)
     texture.image = canvas
@@ -228,10 +236,12 @@ const Logo3D = memo(function Logo3D({
 
   const aspect = texture.image ? texture.image.width / texture.image.height : 2
 
-  const signWidth = BUILDING_WIDTH * 0.55
+  // A backlit lightbox, as on real office towers: a dark panel with the logo glowing on it,
+  // readable at night and in daylight, and brighter while the building is in focus.
+  const signWidth = BUILDING_WIDTH * 0.95
   const signHeight = signWidth / Math.min(aspect, 3)
-  const depth = 0.25
-  const poleHeight = 1.5
+  const depth = 0.3
+  const poleHeight = 1.8
   const signBaseY = poleHeight + signHeight / 2 + 0.1
 
   const worldPos = useRef(new THREE.Vector3())
@@ -250,61 +260,50 @@ const Logo3D = memo(function Logo3D({
     groupRef.current.rotation.y = Math.atan2(dx, dz)
   })
 
+  const glow = isActive ? (isLight ? 1.1 : 1.6) : isLight ? 0.75 : 0.9
+  const face = (
+    <meshStandardMaterial
+      map={texture}
+      emissiveMap={texture}
+      emissive="#ffffff"
+      emissiveIntensity={glow}
+      color="#ffffff"
+      transparent
+      roughness={0.6}
+      depthTest={false}
+      toneMapped={false}
+    />
+  )
+
   return (
     <group>
-      <mesh position={[0, poleHeight / 2, 0]}>
-        <cylinderGeometry args={[0.08, 0.12, poleHeight, 6]} />
-        <meshStandardMaterial
-          color={isLight ? '#999999' : '#666666'}
-          metalness={0.8}
-          roughness={0.2}
-        />
-      </mesh>
+      {[-0.6, 0.6].map((px) => (
+        <mesh key={px} position={[px, poleHeight / 2, 0]}>
+          <cylinderGeometry args={[0.07, 0.1, poleHeight, 6]} />
+          <meshStandardMaterial color={isLight ? '#666666' : '#2a2a2a'} metalness={0.8} roughness={0.3} />
+        </mesh>
+      ))}
 
       <group ref={groupRef} renderOrder={10}>
         <mesh castShadow renderOrder={10}>
-          <boxGeometry args={[signWidth + 0.15, signHeight + 0.15, depth]} />
+          <boxGeometry args={[signWidth + 0.4, signHeight + 0.4, depth]} />
           <meshStandardMaterial
-            color={isActive ? (isLight ? '#d0d0d0' : '#888888') : (isLight ? '#aaaaaa' : '#444444')}
-            metalness={0.85}
-            roughness={0.15}
-            emissive={isActive ? (isLight ? '#aaaaaa' : '#666666') : (isLight ? '#777777' : '#111111')}
-            emissiveIntensity={isActive ? 0.5 : 0.05}
+            color={isLight ? '#1e1e1e' : '#0c0c0c'}
+            emissive="#ffffff"
+            emissiveIntensity={isActive ? 0.06 : 0.02}
+            metalness={0.3}
+            roughness={0.4}
           />
         </mesh>
 
         <mesh position={[0, 0, depth / 2 + 0.005]} renderOrder={11}>
           <planeGeometry args={[signWidth, signHeight]} />
-          <meshStandardMaterial
-            map={texture}
-            transparent
-            color={isActive ? '#ffffff' : (isLight ? '#cccccc' : '#999999')}
-            emissive={isActive ? '#dddddd' : (isLight ? '#666666' : '#222222')}
-            emissiveIntensity={isActive ? 0.7 : 0.05}
-            metalness={0.1}
-            roughness={0.5}
-            depthTest={false}
-          />
+          {face}
         </mesh>
-
-        <mesh
-          position={[0, 0, -(depth / 2 + 0.005)]}
-          rotation={[0, Math.PI, 0]}
-          renderOrder={11}
-        >
+        <mesh position={[0, 0, -(depth / 2 + 0.005)]} rotation={[0, Math.PI, 0]} renderOrder={11}>
           <planeGeometry args={[signWidth, signHeight]} />
-          <meshStandardMaterial
-            map={texture}
-            transparent
-            color={isActive ? '#ffffff' : (isLight ? '#cccccc' : '#999999')}
-            emissive={isActive ? '#dddddd' : (isLight ? '#666666' : '#222222')}
-            emissiveIntensity={isActive ? 0.7 : 0.05}
-            metalness={0.1}
-            roughness={0.5}
-            depthTest={false}
-          />
+          {face}
         </mesh>
-
       </group>
     </group>
   )
@@ -625,6 +624,17 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       return false
     }
 
+    // Sight lines to the landmarks: from the LDC building on, the pyramids rise behind low
+    // buildings on that side; from the Babbel building on, the TV tower stays clear.
+    const ldcZ = experiences[0] ? experiences[0].position * roadLength : -1000
+    const babbelZ = experiences[4] ? experiences[4].position * roadLength : -1000
+    /** Most storeys allowed at a spot (Infinity = no limit). */
+    const maxFloors = (x: number, z: number, frontage: boolean) => {
+      if (x > 0 && z > ldcZ - 25 && z < ldcZ + 85) return frontage ? 3 : 0
+      if (x > 0 && z > babbelZ - 10 && z < babbelZ + 60 && x < 60) return frontage ? Infinity : 4
+      return Infinity
+    }
+
     const pickStyle = (r: number, tall: boolean): FacadeStyle => {
       if (tall) return r < 0.45 ? FACADE_STYLE.curtain : r < 0.75 ? FACADE_STYLE.ribbon : FACADE_STYLE.punched
       return r < 0.4 ? FACADE_STYLE.punched : r < 0.75 ? FACADE_STYLE.brick : FACADE_STYLE.ribbon
@@ -649,9 +659,10 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         const r = rand(n * 13 + 31)
         const d = 4.2 + rand(n * 13 + 32) * 3.5
         const w = 5 + rand(n * 13 + 33) * 3
-        const h = CITY_FLOOR_HEIGHT * (3 + Math.floor(rand(n * 13 + 34) * 4)) + PARAPET_HEIGHT
         const cz = z + d / 2
         const cx = side * (frontX + w / 2)
+        const floors = Math.min(3 + Math.floor(rand(n * 13 + 34) * 4), maxFloors(cx, cz, true))
+        const h = CITY_FLOOR_HEIGHT * floors + PARAPET_HEIGHT
         if (!overlaps(cx, cz, w / 2, d / 2)) add(cx, cz, w, h, d, pickStyle(r, false), rand(n * 13 + 35))
         z += d + (rand(n * 13 + 36) < 0.15 ? 1.6 : 0.02)
         n++
@@ -672,13 +683,15 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         const idx = i < row.count ? i : i - row.count
         const ri = i + row.seedOffset
         const w = row.wMin + rand(ri + 3) * row.wRange
-        const floors = row.floors[0] + Math.floor(rand(ri + 4) * (row.floors[1] - row.floors[0]))
-        const h = floors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT
+        const wanted = row.floors[0] + Math.floor(rand(ri + 4) * (row.floors[1] - row.floors[0]))
         const d = row.dMin + rand(ri + 5) * row.dRange
         for (let attempt = 0; attempt < 20; attempt++) {
           const rSeed = attempt * 200
           const x = side * (row.xMin + rand(ri + 1 + rSeed) * row.xRange)
           const z = 2 + idx * (roadLength / row.count) + rand(ri + 2 + rSeed) * row.zJitter
+          const floors = Math.min(wanted, maxFloors(x, z, false))
+          if (floors < 1) break
+          const h = floors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT
           if (!overlaps(x, z, w / 2, d / 2)) {
             add(x, z, w, h, d, pickStyle(rand(ri + 6), floors >= 9), rand(ri + 7))
             break
@@ -692,7 +705,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     for (let i = 0; i < baseCount; i++) {
       const [cx, , cz] = positions[i]
       const [w, h, d] = scales[i]
-      if (h < 20 || rand(i * 5 + 77) < 0.45) continue
+      if (h < 20 || rand(i * 5 + 77) < 0.45 || maxFloors(cx, cz, false) !== Infinity) continue
       const tierFloors = 2 + Math.floor(rand(i * 5 + 78) * 6)
       const th = tierFloors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT - 0.01
       // The tier's storeys continue the base's: its height above the ground lines up.
