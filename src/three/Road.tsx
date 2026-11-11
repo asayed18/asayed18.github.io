@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { Theme } from '../theme'
 import { useTexture } from '@react-three/drei'
 import { ROAD_WIDTH } from './config'
+import { useCityEnvironment } from './environment'
 
 interface RoadProps {
   length: number
@@ -17,6 +18,9 @@ interface RoadProps {
  */
 const ROAD_Y = -0.0305
 
+/** Size of one asphalt texture tile, in world units. */
+const ROAD_TILE = 2.5
+
 export function Road({ length, theme }: RoadProps) {
   const geometry = useMemo(() => {
     const g = new THREE.PlaneGeometry(ROAD_WIDTH * 10, length)
@@ -30,9 +34,13 @@ export function Road({ length, theme }: RoadProps) {
     '/textures/Asphalt009_1K-JPG_Roughness.webp',
   ])
 
+  // A faint reflection makes the night road read as damp asphalt instead of a black plane.
+  const envMap = useCityEnvironment()
+
   texture.forEach((tex) => {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(20, 20)
+    // One tile per 2.5 units in both directions: asphalt grain at the same scale as the city.
+    tex.repeat.set((ROAD_WIDTH * 10) / ROAD_TILE, length / ROAD_TILE)
   })
 
   return (
@@ -42,8 +50,10 @@ export function Road({ length, theme }: RoadProps) {
         normalMap={texture[1]}
         roughnessMap={texture[2]}
         color={theme === 'light' ? '#ffffff' : '#000000'}
-        roughness={theme === 'light' ? 0.8 : 1.95}
-        metalness={theme === 'light' ? 0.05 : 0.15}
+        envMap={envMap}
+        envMapIntensity={theme === 'light' ? 0.15 : 0.22}
+        roughness={theme === 'light' ? 0.8 : 0.7}
+        metalness={theme === 'light' ? 0.05 : 0.3}
       />
     </mesh>
   )

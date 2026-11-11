@@ -6,33 +6,24 @@ import * as THREE from 'three'
 import type { Experience } from '../data/experiences'
 import type { Theme } from '../theme'
 import type { PerfPreset } from '../utils/devicePerf'
-import { ROAD_WIDTH, BACKGROUND_SIDE_OFFSET } from './config'
+import { ROAD_WIDTH, BACKGROUND_SIDE_OFFSET, SIDEWALK_WIDTH } from './config'
 import { parsePeriodMonths, monthsToHeight } from './period'
 import { useStaticShadow } from './shadows'
 import { keepRendering, MAX_EASING_STEP } from './pacing'
+import {
+  applyFacade,
+  createFacadeUniforms,
+  setFacadeTheme,
+  facadeBays,
+  FACADE_STYLE,
+  CITY_FLOOR_HEIGHT,
+  PARAPET_HEIGHT,
+  type FacadeStyle,
+} from './facade'
+import { useCityEnvironment } from './environment'
 
 const SIDE_OFFSET = BACKGROUND_SIDE_OFFSET
 const BUILDING_WIDTH = 5
-
-/**
- * Wall textures. Every wall repeats them 20 times, so one tile never covers more than about
- * 64 screen pixels: 256px sources are sampled exactly like the former 1K ones (the GPU only ever
- * reached their small mip levels) at a sixteenth of the download and GPU memory.
- */
-const PLASTER_TEXTURES = [
-  '/textures/painted_plaster_wall_diff_256.webp',
-  '/textures/painted_plaster_wall_nor_gl_256.webp',
-  '/textures/painted_plaster_wall_rough_256.webp',
-]
-
-function usePlasterTextures() {
-  const textures = useTexture(PLASTER_TEXTURES)
-  textures.forEach((tex) => {
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(20, 20)
-  })
-  return textures
-}
 
 /**
  * The walls used to carry a displacement map. A box has no vertices inside its faces, so the map
@@ -42,8 +33,60 @@ function usePlasterTextures() {
  */
 const PLASTER_INSET = 0.0077
 
-const WINDOW_GEOMETRY = new THREE.PlaneGeometry(1, 1)
 const UNIT_BOX_GEOMETRY = new THREE.BoxGeometry(1, 1, 1)
+
+/** Facade of each experience building, in order along the road. */
+const EXPERIENCE_STYLES: FacadeStyle[] = [
+  FACADE_STYLE.punched,
+  FACADE_STYLE.curtain,
+  FACADE_STYLE.brick,
+  FACADE_STYLE.ribbon,
+  FACADE_STYLE.curtain,
+]
+
+interface Box {
+  pos: [number, number, number]
+  scale: [number, number, number]
+  /** Tilt around the z axis (awnings). */
+  rotZ?: number
+}
+
+/** Any number of boxes sharing one material, in a single draw. */
+const BoxInstances = memo(function BoxInstances({
+  boxes,
+  material,
+  castShadow = false,
+}: {
+  boxes: Box[]
+  material: THREE.Material
+  castShadow?: boolean
+}) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const dummy = new THREE.Object3D()
+    boxes.forEach((box, i) => {
+      dummy.position.set(...box.pos)
+      dummy.rotation.set(0, 0, box.rotZ ?? 0)
+      dummy.scale.set(...box.scale)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+  }, [boxes])
+  if (boxes.length === 0) return null
+  return (
+    <instancedMesh
+      key={boxes.length}
+      ref={ref}
+      args={[UNIT_BOX_GEOMETRY, material, boxes.length]}
+      castShadow={castShadow}
+      receiveShadow
+      frustumCulled={false}
+    />
+  )
+})
 
 interface BuildingsProps {
   roadLength: number
@@ -56,8 +99,9 @@ interface BuildingsProps {
 /* Giza Pyramids landmark (far behind the first experience building) */
 const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const stoneColor = isLight ? '#222222' : '#0a0a0a'
-  const stoneEmissive = isLight ? '#111111' : '#050505'
+  // Moonlit stone at night: dark, but clearly lighter than the night sky behind it.
+  const stoneColor = isLight ? '#222222' : '#3a3a3a'
+  const stoneEmissive = isLight ? '#111111' : '#1c1c1c'
 
   const pyramids: { x: number; z: number; height: number; radius: number }[] = [
     { x: 50, z: -59, height: 20, radius: 20 },
@@ -90,8 +134,8 @@ const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
 /* Berlin Fernsehturm (TV Tower) landmark behind the fifth experience */
 const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
   const isLight = theme === 'light'
-  const towerColor = isLight ? '#333333' : '#080808'
-  const towerEmissive = isLight ? '#222222' : '#050505'
+  const towerColor = isLight ? '#333333' : '#3a3a3a'
+  const towerEmissive = isLight ? '#222222' : '#1e1e1e'
 
   const shaftHeight = 40
   const shaftRadiusBottom = 2.2
@@ -133,6 +177,12 @@ const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
         />
       </mesh>
 
+      {/* Aviation light on the tip: marks the tower against the night sky. */}
+      <mesh position={[0, antennaY + antennaHeight / 2 + 0.3, 0]}>
+        <sphereGeometry args={[0.45, 8, 6]} />
+        <meshBasicMaterial color={isLight ? '#555555' : '#ffffff'} toneMapped={false} />
+      </mesh>
+
       <mesh position={[0, antennaY, 0]}>
         <cylinderGeometry args={[0.15, 0.4, antennaHeight, 6]} />
         <meshStandardMaterial
@@ -169,11 +219,12 @@ const Logo3D = memo(function Logo3D({
     ctx.drawImage(img, 0, 0)
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const data = imageData.data
+    // White silhouette of the logo (its shape comes from the alpha channel): every logo then
+    // glows the same way on the dark lightbox, whatever its original colours.
     for (let i = 0; i < data.length; i += 4) {
-      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114
-      data[i] = gray
-      data[i + 1] = gray
-      data[i + 2] = gray
+      data[i] = 255
+      data[i + 1] = 255
+      data[i + 2] = 255
     }
     ctx.putImageData(imageData, 0, 0)
     texture.image = canvas
@@ -185,10 +236,12 @@ const Logo3D = memo(function Logo3D({
 
   const aspect = texture.image ? texture.image.width / texture.image.height : 2
 
-  const signWidth = BUILDING_WIDTH * 0.55
+  // A backlit lightbox, as on real office towers: a dark panel with the logo glowing on it,
+  // readable at night and in daylight, and brighter while the building is in focus.
+  const signWidth = BUILDING_WIDTH * 0.95
   const signHeight = signWidth / Math.min(aspect, 3)
-  const depth = 0.25
-  const poleHeight = 1.5
+  const depth = 0.3
+  const poleHeight = 1.8
   const signBaseY = poleHeight + signHeight / 2 + 0.1
 
   const worldPos = useRef(new THREE.Vector3())
@@ -207,61 +260,50 @@ const Logo3D = memo(function Logo3D({
     groupRef.current.rotation.y = Math.atan2(dx, dz)
   })
 
+  const glow = isActive ? (isLight ? 1.1 : 1.6) : isLight ? 0.75 : 0.9
+  const face = (
+    <meshStandardMaterial
+      map={texture}
+      emissiveMap={texture}
+      emissive="#ffffff"
+      emissiveIntensity={glow}
+      color="#ffffff"
+      transparent
+      roughness={0.6}
+      depthTest={false}
+      toneMapped={false}
+    />
+  )
+
   return (
     <group>
-      <mesh position={[0, poleHeight / 2, 0]}>
-        <cylinderGeometry args={[0.08, 0.12, poleHeight, 6]} />
-        <meshStandardMaterial
-          color={isLight ? '#999999' : '#666666'}
-          metalness={0.8}
-          roughness={0.2}
-        />
-      </mesh>
+      {[-0.6, 0.6].map((px) => (
+        <mesh key={px} position={[px, poleHeight / 2, 0]}>
+          <cylinderGeometry args={[0.07, 0.1, poleHeight, 6]} />
+          <meshStandardMaterial color={isLight ? '#666666' : '#2a2a2a'} metalness={0.8} roughness={0.3} />
+        </mesh>
+      ))}
 
       <group ref={groupRef} renderOrder={10}>
         <mesh castShadow renderOrder={10}>
-          <boxGeometry args={[signWidth + 0.15, signHeight + 0.15, depth]} />
+          <boxGeometry args={[signWidth + 0.4, signHeight + 0.4, depth]} />
           <meshStandardMaterial
-            color={isActive ? (isLight ? '#d0d0d0' : '#888888') : (isLight ? '#aaaaaa' : '#444444')}
-            metalness={0.85}
-            roughness={0.15}
-            emissive={isActive ? (isLight ? '#aaaaaa' : '#666666') : (isLight ? '#777777' : '#111111')}
-            emissiveIntensity={isActive ? 0.5 : 0.05}
+            color={isLight ? '#1e1e1e' : '#0c0c0c'}
+            emissive="#ffffff"
+            emissiveIntensity={isActive ? 0.06 : 0.02}
+            metalness={0.3}
+            roughness={0.4}
           />
         </mesh>
 
         <mesh position={[0, 0, depth / 2 + 0.005]} renderOrder={11}>
           <planeGeometry args={[signWidth, signHeight]} />
-          <meshStandardMaterial
-            map={texture}
-            transparent
-            color={isActive ? '#ffffff' : (isLight ? '#cccccc' : '#999999')}
-            emissive={isActive ? '#dddddd' : (isLight ? '#666666' : '#222222')}
-            emissiveIntensity={isActive ? 0.7 : 0.05}
-            metalness={0.1}
-            roughness={0.5}
-            depthTest={false}
-          />
+          {face}
         </mesh>
-
-        <mesh
-          position={[0, 0, -(depth / 2 + 0.005)]}
-          rotation={[0, Math.PI, 0]}
-          renderOrder={11}
-        >
+        <mesh position={[0, 0, -(depth / 2 + 0.005)]} rotation={[0, Math.PI, 0]} renderOrder={11}>
           <planeGeometry args={[signWidth, signHeight]} />
-          <meshStandardMaterial
-            map={texture}
-            transparent
-            color={isActive ? '#ffffff' : (isLight ? '#cccccc' : '#999999')}
-            emissive={isActive ? '#dddddd' : (isLight ? '#666666' : '#222222')}
-            emissiveIntensity={isActive ? 0.7 : 0.05}
-            metalness={0.1}
-            roughness={0.5}
-            depthTest={false}
-          />
+          {face}
         </mesh>
-
       </group>
     </group>
   )
@@ -320,7 +362,9 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   startYear,
   isActive,
   isLight,
+  style,
 }: {
+  style: FacadeStyle
   x: number
   width: number
   height: number
@@ -331,32 +375,6 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   isLight: boolean
 }) {
   const floorHeight = height / numFloors
-  const windowWidth = 0.55
-  const windowHeight = floorHeight * 0.45
-  const windowsPerFace = 3
-
-  const windows = useMemo(() => {
-    const result: { pos: [number, number, number]; rot: [number, number, number] }[] = []
-
-    for (let floor = 0; floor < numFloors; floor++) {
-      const floorY = floor * floorHeight + floorHeight * 0.55
-      const wSpacing = width / (windowsPerFace + 1)
-
-      for (let w = 0; w < windowsPerFace; w++) {
-        const wx = -width / 2 + wSpacing * (w + 1)
-        result.push({ pos: [wx, floorY, depth / 2 + 0.01], rot: [0, 0, 0] })
-        result.push({ pos: [wx, floorY, -depth / 2 - 0.01], rot: [0, Math.PI, 0] })
-      }
-
-      const sSpacing = depth / (windowsPerFace + 1)
-      for (let w = 0; w < windowsPerFace; w++) {
-        const wz = -depth / 2 + sSpacing * (w + 1)
-        result.push({ pos: [width / 2 + 0.01, floorY, wz], rot: [0, Math.PI / 2, 0] })
-        result.push({ pos: [-width / 2 - 0.01, floorY, wz], rot: [0, -Math.PI / 2, 0] })
-      }
-    }
-    return result
-  }, [numFloors, floorHeight, width, depth])
 
   const ledgeYs = useMemo(() => {
     const result: number[] = []
@@ -366,66 +384,43 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
     return result
   }, [numFloors, floorHeight])
 
-  const texture = usePlasterTextures()
+  const envMap = useCityEnvironment()
 
-  // One instanced mesh for all windows of the building instead of one mesh and one material per
-  // window (the Babbel tower alone has 60).
-  const windowsRef = useRef<THREE.InstancedMesh>(null)
-  useLayoutEffect(() => {
-    const mesh = windowsRef.current
-    if (!mesh) return
-    const dummy = new THREE.Object3D()
-    windows.forEach((win, i) => {
-      dummy.position.set(win.pos[0], win.pos[1], win.pos[2])
-      dummy.rotation.set(win.rot[0], win.rot[1], win.rot[2])
-      dummy.scale.set(windowWidth, windowHeight, 1)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-    })
-    mesh.instanceMatrix.needsUpdate = true
-    mesh.computeBoundingSphere()
-  }, [windows, windowWidth, windowHeight])
+  // The windows are painted by the facade shader, one storey per year of the role.
+  const facade = useMemo(() => createFacadeUniforms(), [])
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0.03 })
+    applyFacade(m, facade)
+    return m
+  }, [facade])
+  useEffect(() => () => material.dispose(), [material])
 
   const bodyColor = isActive ? (isLight ? '#ffffff' : '#666666') : (isLight ? '#e0e0e0' : '#111111')
   const bodyEmissive = isActive ? (isLight ? '#dddddd' : '#222222') : (isLight ? '#000000' : '#000000')
-  const windowColor = isActive ? (isLight ? '#888888' : '#ffffff') : (isLight ? '#cccccc' : '#000000')
-  const windowEmissive = isActive ? (isLight ? '#666666' : '#ffffff') : (isLight ? '#999999' : '#000000')
-  const ledgeColor = isActive ? (isLight ? '#eeeeee' : '#050505') : (isLight ? '#cdcdcd' : '#1a1a1a')
+  const labelColor = isActive ? (isLight ? '#e8e8e8' : '#c0c0c0') : (isLight ? '#cccccc' : '#5a5a5a')
+  const ledgeColor = isActive ? (isLight ? '#eeeeee' : '#4a4a4a') : (isLight ? '#cdcdcd' : '#1a1a1a')
+
+  useLayoutEffect(() => {
+    material.envMap = envMap
+    material.envMapIntensity = isLight ? 0.9 : 0.45
+    material.color.set(bodyColor)
+    material.emissive.set(bodyEmissive)
+    material.emissiveIntensity = isActive ? 0.1 : 0
+    facade.uHalf.value.set(width / 2 - PLASTER_INSET, height / 2 - PLASTER_INSET, depth / 2 - PLASTER_INSET)
+    // Real storeys (several per year of the role); the ledges still mark the years.
+    facade.uFloorH.value = (height - PARAPET_HEIGHT) / Math.max(Math.round((height - PARAPET_HEIGHT) / CITY_FLOOR_HEIGHT), 1)
+    facade.uColW.value = style === FACADE_STYLE.curtain ? 1.25 : 1.15
+    facade.uStyle.value = style
+    setFacadeTheme(facade, isLight, isActive)
+  }, [material, facade, envMap, isLight, isActive, bodyColor, bodyEmissive, width, height, depth, style])
 
   return (
     <group position={[x, 0, 0]}>
-      <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+      <mesh position={[0, height / 2, 0]} material={material} castShadow receiveShadow>
         <boxGeometry
           args={[width - 2 * PLASTER_INSET, height - 2 * PLASTER_INSET, depth - 2 * PLASTER_INSET]}
         />
-        <meshStandardMaterial
-          color={bodyColor}
-          emissive={bodyEmissive}
-          emissiveIntensity={isActive ? 0.1 : 0}
-          map={texture[0]}
-          normalMap={texture[1]}
-          roughnessMap={texture[2]}
-          roughness={0.9}
-          metalness={0.03}
-        />
       </mesh>
-
-      <instancedMesh
-        key={windows.length}
-        ref={windowsRef}
-        args={[WINDOW_GEOMETRY, undefined, windows.length]}
-        receiveShadow
-      >
-        <meshStandardMaterial
-          color={isActive ? (isLight ? '#f2f2f2' : '#e0e0e0') : windowColor}
-          emissive={isActive ? (isLight ? '#e0e0e0' : '#c0c0c0') : windowEmissive}
-          emissiveIntensity={isActive ? 0.2 : 0.15}
-          metalness={isActive ? 0.35 : 0.15}
-          roughness={isActive ? 0.1 : 0.25}
-          transparent
-          opacity={isActive ? 0.9 : 0.7}
-        />
-      </instancedMesh>
 
       {ledgeYs.map((y, i) => (
         <mesh
@@ -453,7 +448,7 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
               rotation={[0, rotY, 0]}
               scale={[1, 1, 1]}
               fontSize={floorHeight * 0.12}
-              color={isActive ? (isLight ? '#e8e8e8' : '#c0c0c0') : windowColor}
+              color={labelColor}
               opacity={isActive ? 1 : 0.8}
               anchorX={facingRoad > 0 ? 'right' : 'left'}
               anchorY="bottom"
@@ -594,179 +589,232 @@ function ActiveLights({
 export function Buildings({ roadLength, experiences, activeExperienceId, theme, perf }: BuildingsProps) {
   const isLight = theme === 'light'
   const instancedRef = useRef<THREE.InstancedMesh>(null)
-  const { positions, scales, ledgeInstances, windowInstances } = useMemo(() => {
+  const city = useMemo(() => {
     const positions: [number, number, number][] = []
     const scales: [number, number, number][] = []
+    /** Per building: storey height, bay width, facade style (the shader's `aFacade`). */
+    const params: [number, number, number][] = []
+    /** Per building: brightness multiplier of the wall colour. */
+    const tones: number[] = []
     const seed = 12345
     const rand = (i: number) => {
       const x = Math.sin(seed + i * 0.1) * 10000
       return x - Math.floor(x)
     }
 
-    const EXP_W = 0
-    const EXP_D = 0
+    // Keep a clear plaza around each experience building and the pyramids, so the city never
+    // hides them from the camera.
     const MARGIN = 0.01
-    const expZones = experiences.map((exp, index) => {
+    const zones = experiences.map((exp, index) => {
       const side = index % 2 === 0 ? 1 : -1
-      return {
-        x: side * (ROAD_WIDTH / 2 + SIDE_OFFSET),
-        z: exp.position * roadLength,
-        hw: EXP_W / 2,
-        hd: EXP_D / 2,
-      }
+      return { x: side * (ROAD_WIDTH / 2 + SIDE_OFFSET), z: exp.position * roadLength, hw: 4.5, hd: 6 }
     })
-
     const pyramidZ = experiences[0] ? experiences[0].position * roadLength : 0
-    expZones.push({ x: 50, z: pyramidZ, hw: 18, hd: 25 })
+    zones.push({ x: 50, z: pyramidZ, hw: 18, hd: 25 })
 
     const overlaps = (cx: number, cz: number, hw: number, hd: number) => {
-      for (const zone of expZones) {
-        if (
-          Math.abs(cx - zone.x) < hw + zone.hw + MARGIN &&
-          Math.abs(cz - zone.z) < hd + zone.hd + MARGIN
-        ) {
-          return true
-        }
+      for (const zone of zones) {
+        if (Math.abs(cx - zone.x) < hw + zone.hw + MARGIN && Math.abs(cz - zone.z) < hd + zone.hd + MARGIN) return true
       }
       for (let j = 0; j < positions.length; j++) {
         const [px, , pz] = positions[j]
         const [sw, , sd] = scales[j]
-        if (
-          Math.abs(cx - px) < hw + sw / 2 + MARGIN &&
-          Math.abs(cz - pz) < hd + sd / 2 + MARGIN
-        ) {
-          return true
-        }
+        if (Math.abs(cx - px) < hw + sw / 2 + MARGIN && Math.abs(cz - pz) < hd + sd / 2 + MARGIN) return true
       }
       return false
     }
 
-    const bCount = perf.buildingCount
-    const baseX = ROAD_WIDTH / 2 + SIDE_OFFSET
-    const rows = [
-      // Near-road fillers to close the gap to the experience buildings
-      { count: bCount, xMin: baseX - 1, xRange: 3, wMin: 2, wRange: 2, dMin: 1.8, dRange: 2, hMin: 2, hRange: 5, seedOffset: 250, zJitter: 1.2 },
-      { count: bCount, xMin: baseX + 1, xRange: 4, wMin: 4, wRange: 4, dMin: 2.5, dRange: 3, hMin: 3, hRange: 10, seedOffset: 400, zJitter: 1.5 },
-      // Original rows, slightly pulled in by reduced SIDE_OFFSET
-      { count: bCount, xMin: baseX + 5, xRange: 5, wMin: 4, wRange: 5, dMin: 2, dRange: 4, hMin: 3, hRange: 8, seedOffset: 500, zJitter: 2 },
-      { count: bCount, xMin: baseX + 11, xRange: 5, wMin: 3, wRange: 5, dMin: 2, dRange: 3, hMin: 2, hRange: 6, seedOffset: 10000, zJitter: 2.5 },
-      { count: bCount, xMin: baseX + 17, xRange: 5, wMin: 3, wRange: 4, dMin: 2, dRange: 3, hMin: 2, hRange: 5, seedOffset: 15000, zJitter: 2.5 },
-      { count: Math.floor(bCount * 0.6), xMin: baseX + 24, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 9, seedOffset: 20000, zJitter: 3 },
-      { count: Math.floor(bCount * 0.6), xMin: baseX + 38, xRange: 8, wMin: 3, wRange: 5, dMin: 3, dRange: 5, hMin: 6, hRange: 9, seedOffset: 25000, zJitter: 3 },
-    ]
+    // Sight lines to the landmarks: from the LDC building on, the pyramids rise behind low
+    // buildings on that side; from the Babbel building on, the TV tower stays clear.
+    const ldcZ = experiences[0] ? experiences[0].position * roadLength : -1000
+    const babbelZ = experiences[4] ? experiences[4].position * roadLength : -1000
+    /** Most storeys allowed at a spot (Infinity = no limit). */
+    const maxFloors = (x: number, z: number, frontage: boolean) => {
+      if (x > 0 && z > ldcZ - 25 && z < ldcZ + 85) return frontage ? 3 : 0
+      if (x > 0 && z > babbelZ - 10 && z < babbelZ + 60 && x < 60) return frontage ? Infinity : 4
+      return Infinity
+    }
 
+    const pickStyle = (r: number, tall: boolean): FacadeStyle => {
+      if (tall) return r < 0.45 ? FACADE_STYLE.curtain : r < 0.75 ? FACADE_STYLE.ribbon : FACADE_STYLE.punched
+      return r < 0.4 ? FACADE_STYLE.punched : r < 0.75 ? FACADE_STYLE.brick : FACADE_STYLE.ribbon
+    }
+    const bayWidth = (style: FacadeStyle, r: number) =>
+      style === FACADE_STYLE.brick ? 1.05 + 0.2 * r : style === FACADE_STYLE.curtain ? 1.3 : 1.25 + 0.35 * r
+
+    const add = (x: number, z: number, w: number, h: number, d: number, style: FacadeStyle, r: number) => {
+      positions.push([x, h / 2, z])
+      scales.push([w, h, d])
+      params.push([CITY_FLOOR_HEIGHT, bayWidth(style, r), style])
+      tones.push(style === FACADE_STYLE.curtain ? 0.8 + 0.3 * r : 0.72 + 0.5 * rand(r * 9000 + 17))
+    }
+
+    // Street wall: buildings side by side along the sidewalk, as on a real street, with the
+    // occasional alley between them.
+    const frontX = ROAD_WIDTH / 2 + SIDEWALK_WIDTH
+    let n = 0
+    for (const side of [-1, 1]) {
+      let z = -2
+      while (z < roadLength + 6) {
+        const r = rand(n * 13 + 31)
+        const d = 4.2 + rand(n * 13 + 32) * 3.5
+        const w = 5 + rand(n * 13 + 33) * 3
+        const cz = z + d / 2
+        const cx = side * (frontX + w / 2)
+        const floors = Math.min(3 + Math.floor(rand(n * 13 + 34) * 4), maxFloors(cx, cz, true))
+        const h = CITY_FLOOR_HEIGHT * floors + PARAPET_HEIGHT
+        if (!overlaps(cx, cz, w / 2, d / 2)) add(cx, cz, w, h, d, pickStyle(r, false), rand(n * 13 + 35))
+        z += d + (rand(n * 13 + 36) < 0.15 ? 1.6 : 0.02)
+        n++
+      }
+    }
+
+    // Blocks behind the street wall, rising to towers towards the edge of the city.
+    const bCount = perf.buildingCount
+    const rows = [
+      { count: bCount, xMin: 15, xRange: 4, wMin: 4, wRange: 4, dMin: 4, dRange: 4, floors: [4, 9], seedOffset: 400, zJitter: 2 },
+      { count: bCount, xMin: 22, xRange: 6, wMin: 4, wRange: 5, dMin: 4, dRange: 4, floors: [4, 11], seedOffset: 500, zJitter: 2.5 },
+      { count: Math.floor(bCount * 0.7), xMin: 32, xRange: 8, wMin: 5, wRange: 5, dMin: 5, dRange: 4, floors: [5, 14], seedOffset: 10000, zJitter: 3 },
+      { count: Math.floor(bCount * 0.5), xMin: 45, xRange: 12, wMin: 5, wRange: 6, dMin: 5, dRange: 5, floors: [6, 17], seedOffset: 20000, zJitter: 3 },
+    ]
     for (const row of rows) {
       for (let i = 0; i < row.count * 2; i++) {
         const side = i < row.count ? -1 : 1
         const idx = i < row.count ? i : i - row.count
         const ri = i + row.seedOffset
         const w = row.wMin + rand(ri + 3) * row.wRange
-        const h = row.hMin + rand(ri + 4) * row.hRange
+        const wanted = row.floors[0] + Math.floor(rand(ri + 4) * (row.floors[1] - row.floors[0]))
         const d = row.dMin + rand(ri + 5) * row.dRange
-
-        let placed = false
-        for (let attempt = 0; attempt < 20 && !placed; attempt++) {
+        for (let attempt = 0; attempt < 20; attempt++) {
           const rSeed = attempt * 200
           const x = side * (row.xMin + rand(ri + 1 + rSeed) * row.xRange)
           const z = 2 + idx * (roadLength / row.count) + rand(ri + 2 + rSeed) * row.zJitter
-
+          const floors = Math.min(wanted, maxFloors(x, z, false))
+          if (floors < 1) break
+          const h = floors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT
           if (!overlaps(x, z, w / 2, d / 2)) {
-            positions.push([x, h / 2, z])
-            scales.push([w, h, d])
-            placed = true
+            add(x, z, w, h, d, pickStyle(rand(ri + 6), floors >= 9), rand(ri + 7))
+            break
           }
         }
       }
     }
 
-    const BG_FLOOR_H = 3.5
-    const BG_WIN_PER_FACE = 2
-    const BG_WIN_WIDTH = 0.5
-
-    const ledgeInstances: { pos: [number, number, number]; scale: [number, number, number] }[] = []
-    const windowInstances: {
-      pos: [number, number, number]
-      rot: [number, number, number]
-      scale: [number, number, number]
-    }[] = []
-
-    for (let i = 0; i < positions.length; i++) {
+    // Setbacks: some towers continue in a narrower tier on top of their base.
+    const baseCount = positions.length
+    for (let i = 0; i < baseCount; i++) {
       const [cx, , cz] = positions[i]
       const [w, h, d] = scales[i]
-      const numFloors = Math.max(Math.floor(h / BG_FLOOR_H), 1)
-      const floorH = h / numFloors
-      const winH = floorH * 0.4
+      if (h < 20 || rand(i * 5 + 77) < 0.45 || maxFloors(cx, cz, false) !== Infinity) continue
+      const tierFloors = 2 + Math.floor(rand(i * 5 + 78) * 6)
+      const th = tierFloors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT - 0.01
+      // The tier's storeys continue the base's: its height above the ground lines up.
+      positions.push([cx, h - PARAPET_HEIGHT + th / 2, cz])
+      scales.push([w * 0.66, th, d * 0.66])
+      params.push(params[i])
+      tones.push(tones[i])
+    }
 
-      for (let f = 1; f < numFloors; f++) {
-        ledgeInstances.push({
-          pos: [cx, f * floorH, cz],
-          scale: [w + 0.08, 0.06, d + 0.08],
-        })
+    // Cornices along the top of each wall, balconies with railings, storefront awnings.
+    const cornices: Box[] = []
+    const balconies: Box[] = []
+    const railings: Box[] = []
+    const awnings: Box[] = []
+
+    for (let i = 0; i < positions.length; i++) {
+      const [cx, cy, cz] = positions[i]
+      const [w, h, d] = scales[i]
+      const [floorH, bay, style] = params[i]
+      const top = cy + h / 2
+      if (style === FACADE_STYLE.curtain) {
+        cornices.push({ pos: [cx, top - 0.06, cz], scale: [w + 0.06, 0.12, d + 0.06] })
+      } else {
+        cornices.push({ pos: [cx, top - 0.16, cz], scale: [w + 0.36, 0.32, d + 0.36] })
+        cornices.push({ pos: [cx, top - 0.42, cz], scale: [w + 0.16, 0.12, d + 0.16] })
       }
 
-      for (let f = 0; f < numFloors; f++) {
-        const floorY = f * floorH + floorH * 0.55
-        const sSpacing = d / (BG_WIN_PER_FACE + 1)
-        const innerSide = cx > 0 ? -1 : 1
-        for (let wn = 0; wn < BG_WIN_PER_FACE; wn++) {
-          const wz = -d / 2 + sSpacing * (wn + 1)
-          windowInstances.push({
-            pos: [cx + innerSide * (w / 2 + 0.01), floorY, cz + wz],
-            rot: [0, innerSide > 0 ? Math.PI / 2 : -Math.PI / 2, 0],
-            scale: [BG_WIN_WIDTH, winH, 1],
+      // Street-facing details only where people see them: the street wall.
+      const facesRoad = Math.abs(Math.abs(cx) - w / 2 - frontX) < 0.05 && cy - h / 2 < 0.01
+      if (!facesRoad) continue
+      const inward = cx > 0 ? -1 : 1
+      const faceX = cx + inward * (w / 2)
+      const { centers, width } = facadeBays(d, bay)
+      const floors = Math.floor((h - PARAPET_HEIGHT) / floorH)
+
+      centers.forEach((c, k) => {
+        if (rand(i * 31 + k * 7 + 1) < 0.3) {
+          awnings.push({
+            pos: [faceX + inward * 0.34, floorH * 0.8 + 0.1, cz + c],
+            scale: [0.7, 0.03, width * 0.8],
+            rotZ: inward * -0.26,
+          })
+        }
+      })
+      if (style === FACADE_STYLE.punched || style === FACADE_STYLE.brick) {
+        for (let f = 1; f < floors; f++) {
+          centers.forEach((c, k) => {
+            if (rand(i * 97 + f * 11 + k * 3) < 0.55) return
+            const y = f * floorH + floorH * 0.3
+            balconies.push({ pos: [faceX + inward * 0.3, y, cz + c], scale: [0.6, 0.08, width * 0.78] })
+            railings.push({ pos: [faceX + inward * 0.58, y + 0.3, cz + c], scale: [0.03, 0.52, width * 0.78] })
           })
         }
       }
     }
 
-    return { positions, scales, ledgeInstances, windowInstances }
+    return { positions, scales, params, tones, cornices, balconies, railings, awnings }
   }, [roadLength, experiences, perf.buildingCount])
+  const { positions, scales, params, tones } = city
 
-  const texture = usePlasterTextures()
-  const material = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        map: texture[0],
-        normalMap: texture[1],
-        roughnessMap: texture[2],
-        roughness: 0.9,
-        metalness: 0.05,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [texture[0], texture[1], texture[2]]
-  )
+  const envMap = useCityEnvironment()
+  const facade = useMemo(() => createFacadeUniforms(), [])
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({
+      envMap,
+      roughness: 0.9,
+      metalness: 0.05,
+    })
+    applyFacade(m, facade)
+    return m
+  }, [envMap, facade])
 
-  const ledgeMaterial = useMemo(() => new THREE.MeshStandardMaterial(), [])
-
-  const windowMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        emissiveIntensity: 0.15,
-        metalness: 0.25,
-        roughness: 0.18,
-        transparent: true,
-        opacity: 0.78,
-      }),
-    []
-  )
+  const ledgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.85 }), [])
+  const railingMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.7 }), [])
+  const awningMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }), [])
 
   // Theme colours are plain uniforms: set them without flagging the materials for a rebuild.
   // Layout effect so they are in place before the first frame.
   useLayoutEffect(() => {
     material.color.set(isLight ? '#c8c8c8' : '#383838')
-    ledgeMaterial.color.set(isLight ? '#d8d8d8' : '#303030')
-    windowMaterial.color.set(isLight ? '#a0a0a0' : '#3a3a3a')
-    windowMaterial.emissive.set(isLight ? '#0f0f0f' : '#0a0a0a')
-  }, [isLight, material, ledgeMaterial, windowMaterial])
+    ledgeMaterial.color.set(isLight ? '#dcdcdc' : '#333333')
+    railingMaterial.color.set(isLight ? '#3a3a3a' : '#151515')
+    awningMaterial.color.set(isLight ? '#a4a4a4' : '#1e1e1e')
+    material.envMapIntensity = isLight ? 0.8 : 0.35
+    setFacadeTheme(facade, isLight)
+  }, [isLight, material, ledgeMaterial, railingMaterial, awningMaterial, facade])
+
+  useEffect(
+    () => () => {
+      railingMaterial.dispose()
+      awningMaterial.dispose()
+    },
+    [railingMaterial, awningMaterial]
+  )
 
   const dummy = useMemo(() => new THREE.Object3D(), [])
 
-  const ledgeRef = useRef<THREE.InstancedMesh>(null)
-  const windowRef = useRef<THREE.InstancedMesh>(null)
+  // Own geometry for the city: it carries one facade description per instance.
+  const cityGeometry = useMemo(() => {
+    const g = new THREE.BoxGeometry(1, 1, 1)
+    g.setAttribute('aFacade', new THREE.InstancedBufferAttribute(new Float32Array(params.flat()), 3))
+    return g
+  }, [params])
+  useEffect(() => () => cityGeometry.dispose(), [cityGeometry])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mesh = instancedRef.current
     if (!mesh) return
+    const color = new THREE.Color()
     for (let i = 0; i < positions.length; i++) {
       const [x, y, z] = positions[i]
       const [sx, sy, sz] = scales[i]
@@ -775,40 +823,12 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       dummy.rotation.set(0, 0, 0)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
+      mesh.setColorAt(i, color.setScalar(tones[i]))
     }
     mesh.count = positions.length
     mesh.instanceMatrix.needsUpdate = true
-  }, [positions, scales, dummy])
-
-  useEffect(() => {
-    const mesh = ledgeRef.current
-    if (!mesh || ledgeInstances.length === 0) return
-    for (let i = 0; i < ledgeInstances.length; i++) {
-      const { pos, scale } = ledgeInstances[i]
-      dummy.position.set(pos[0], pos[1], pos[2])
-      dummy.rotation.set(0, 0, 0)
-      dummy.scale.set(scale[0], scale[1], scale[2])
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-    }
-    mesh.count = ledgeInstances.length
-    mesh.instanceMatrix.needsUpdate = true
-  }, [ledgeInstances, dummy])
-
-  useEffect(() => {
-    const mesh = windowRef.current
-    if (!mesh || windowInstances.length === 0) return
-    for (let i = 0; i < windowInstances.length; i++) {
-      const { pos, rot, scale } = windowInstances[i]
-      dummy.position.set(pos[0], pos[1], pos[2])
-      dummy.rotation.set(rot[0], rot[1], rot[2])
-      dummy.scale.set(scale[0], scale[1], scale[2])
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-    }
-    mesh.count = windowInstances.length
-    mesh.instanceMatrix.needsUpdate = true
-  }, [windowInstances, dummy])
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }, [positions, scales, tones, dummy])
 
   const expRenderData = useMemo(
     () =>
@@ -857,11 +877,10 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     () => () => {
       material.dispose()
       ledgeMaterial.dispose()
-      windowMaterial.dispose()
       tickMaterial.dispose()
       tickGeometry.dispose()
     },
-    [material, ledgeMaterial, windowMaterial, tickMaterial, tickGeometry]
+    [material, ledgeMaterial, tickMaterial, tickGeometry]
   )
 
   // The pyramids and the light on them never move: bake its six shadow passes once.
@@ -892,27 +911,16 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       <instancedMesh
         key={positions.length}
         ref={instancedRef}
-        args={[UNIT_BOX_GEOMETRY, material, positions.length]}
+        args={[cityGeometry, material, positions.length]}
         castShadow
         receiveShadow
         frustumCulled={false}
       />
 
-      {ledgeInstances.length > 0 && (
-        <instancedMesh
-          ref={ledgeRef}
-          args={[UNIT_BOX_GEOMETRY, ledgeMaterial, ledgeInstances.length]}
-          frustumCulled={false}
-        />
-      )}
-
-      {windowInstances.length > 0 && (
-        <instancedMesh
-          ref={windowRef}
-          args={[WINDOW_GEOMETRY, windowMaterial, windowInstances.length]}
-          frustumCulled={false}
-        />
-      )}
+      <BoxInstances boxes={city.cornices} material={ledgeMaterial} castShadow />
+      <BoxInstances boxes={city.balconies} material={ledgeMaterial} castShadow />
+      <BoxInstances boxes={city.railings} material={railingMaterial} />
+      <BoxInstances boxes={city.awnings} material={awningMaterial} castShadow />
 
       <group position={[0, 0, experiences[0] ? experiences[0].position * roadLength : 0]}>
         <GizaPyramids theme={theme} />
@@ -931,7 +939,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
         <pointLight position={[48, 45, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 5 : 22} distance={55} decay={1.2} />
       </group>
 
-      {expRenderData.map(({ exp, x, buildingHeight, numFloors, startYear, z }) => {
+      {expRenderData.map(({ exp, index, x, buildingHeight, numFloors, startYear, z }) => {
         const isActive = exp.id === activeExperienceId
 
         return (
@@ -945,6 +953,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
               startYear={startYear}
               isActive={isActive}
               isLight={isLight}
+              style={EXPERIENCE_STYLES[index % EXPERIENCE_STYLES.length]}
             />
             {exp.logo && (
               <group position={[x, buildingHeight, 0]}>

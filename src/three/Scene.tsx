@@ -8,6 +8,7 @@ import { useSceneRig } from './useSceneRig'
 import { SkyGradient, CelestialBody, EndOfRoadLight, SUN_OFFSET, MOON_OFFSET } from './lighting'
 import { PostProcessing } from './PostProcessing'
 import { Road } from './Road'
+import { Street } from './Street'
 import { Buildings } from './Buildings'
 import { useStaticShadow } from './shadows'
 import { ROAD_LENGTH } from './config'
@@ -98,6 +99,7 @@ export const Scene = memo(function Scene({
 
       <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />
       <Road length={ROAD_LENGTH} theme={theme} />
+      <Street roadLength={ROAD_LENGTH} theme={theme} />
       <EndOfRoadLight />
 
       <Buildings

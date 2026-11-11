@@ -26,9 +26,6 @@ const TEXTURES = [
   ['Asphalt009_1K-JPG_Color.jpg', 'Asphalt009_1K-JPG_Color.webp', 1024],
   ['Asphalt009_1K-JPG_NormalGL.jpg', 'Asphalt009_1K-JPG_NormalGL.webp', 1024],
   ['Asphalt009_1K-JPG_Roughness.jpg', 'Asphalt009_1K-JPG_Roughness.webp', 1024],
-  ['painted_plaster_wall_diff_1k.jpg', 'painted_plaster_wall_diff_256.webp', 256],
-  ['painted_plaster_wall_nor_gl_1k.jpg', 'painted_plaster_wall_nor_gl_256.webp', 256],
-  ['painted_plaster_wall_rough_1k.jpg', 'painted_plaster_wall_rough_256.webp', 256],
   ['moon.png', 'moon.webp', 512],
 ]
 

@@ -62,7 +62,7 @@ export function useSceneRig({ progressRef, activeExperienceId, experiences }: Sc
       const buildingX = side * (ROAD_WIDTH / 2 + EXPERIENCE_SIDE_OFFSET)
 
       const LOGO_OFFSET = 6
-      const LOGO_SIGN_HEIGHT_ESTIMATE = 3
+      const LOGO_SIGN_HEIGHT_ESTIMATE = 5
       const totalHeight = buildingHeight + LOGO_OFFSET + LOGO_SIGN_HEIGHT_ESTIMATE
       const lookAtY = totalHeight / 2
 
