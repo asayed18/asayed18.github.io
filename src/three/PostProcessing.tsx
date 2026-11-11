@@ -11,8 +11,16 @@ import {
   HueSaturation,
   Noise,
   ChromaticAberration,
+  DepthOfField,
+  BrightnessContrast,
 } from '@react-three/postprocessing'
-import { BlendFunction, ToneMappingMode, type EffectComposer as EffectComposerImpl } from 'postprocessing'
+import {
+  BlendFunction,
+  ToneMappingMode,
+  type DepthOfFieldEffect,
+  type EffectComposer as EffectComposerImpl,
+} from 'postprocessing'
+import { cameraFocus } from './useSceneRig'
 import type { PerfPreset } from '../utils/devicePerf'
 import type { Theme } from '../theme'
 import { takeContinuous } from './pacing'
@@ -199,16 +207,27 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
     }
   }, 2)
 
+  // The depth of field follows what the camera looks at (see useSceneRig): the building in focus
+  // is sharp and the city behind it softens; on the road the sharp zone is much deeper.
+  const dofRef = useRef<DepthOfFieldEffect>(null)
+  useFrame((state, delta) => {
+    const dof = dofRef.current
+    if (!dof) return
+    const k = Math.min(delta * 3, 1)
+    dof.cocMaterial.focusDistance = state.camera.position.distanceTo(cameraFocus.target)
+    dof.cocMaterial.focusRange += (cameraFocus.range - dof.cocMaterial.focusRange) * k
+  })
+
   // A stable array: the composer rebuilds its passes whenever its children change identity.
   //
   // The chain, as a camera would see it:
   // - N8AO: ambient occlusion in the corners, under the cornices and where the blocks meet the
   //   street (half resolution on mid-range GPUs).
-  // - Bloom on the lit windows, lamps and the moon; filmic tone mapping rolls off the highlights
-  //   at night instead of clipping them. Saturation is pinned to zero: the city stays black and
-  //   white whatever a texture or a light brings in.
-  // - SMAA on the tone-mapped image, then a trace of lens fringing on fast GPUs, vignetting and
-  //   film grain last so the antialiasing never smears the grain.
+  // - Depth of field focused on what the camera looks at, with round bokeh on the lit windows.
+  // - Bloom on the lit windows, lamps, sun and moon; filmic tone mapping at night.
+  // - Grading: colours held back a little and a touch more contrast, for a muted film look.
+  // - SMAA on the tone-mapped image, then lens fringing towards the corners, vignetting and film
+  //   grain last so the antialiasing never smears the grain.
   const effects = useMemo(() => {
     const isLight = theme === 'light'
     const list: JSX.Element[] = []
@@ -216,12 +235,24 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
       list.push(
         <N8AO
           key="ao"
-          aoRadius={2.6}
-          distanceFalloff={1.1}
-          intensity={isLight ? 2.4 : 1.6}
+          aoRadius={3}
+          distanceFalloff={1.2}
+          intensity={isLight ? 3 : 2}
           quality={perf.tier === 'high' ? 'medium' : 'low'}
           halfRes={perf.tier !== 'high'}
           depthAwareUpsampling
+        />
+      )
+    }
+    if (perf.tier !== 'low') {
+      list.push(
+        <DepthOfField
+          key="dof"
+          ref={dofRef}
+          focusDistance={20}
+          focusRange={cameraFocus.range}
+          bokehScale={perf.tier === 'high' ? 2.2 : 1.6}
+          resolutionScale={0.5}
         />
       )
     }
@@ -229,32 +260,31 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
       list.push(
         <Bloom
           key="bloom"
-          intensity={isLight ? 0.25 : 0.75}
-          luminanceThreshold={isLight ? 0.75 : 0.4}
-          luminanceSmoothing={0.35}
+          intensity={isLight ? 0.45 : 1.1}
+          luminanceThreshold={isLight ? 0.72 : 0.35}
+          luminanceSmoothing={0.4}
           mipmapBlur
-          radius={0.75}
+          radius={0.8}
         />
       )
     }
-    list.push(<HueSaturation key="bw" saturation={-1} />)
     if (!isLight) list.push(<ToneMapping key="tone" mode={ToneMappingMode.ACES_FILMIC} />)
-    list.push(<Vignette key="vignette" offset={0.3} darkness={isLight ? 0.38 : 0.55} blendFunction={BlendFunction.NORMAL} />)
+    list.push(<HueSaturation key="grade" saturation={-0.12} />)
+    list.push(<BrightnessContrast key="contrast" brightness={isLight ? 0 : 0.02} contrast={isLight ? 0.08 : 0.12} />)
     if (perf.tier !== 'low') list.push(<SMAA key="smaa" />)
-    if (perf.tier === 'high') {
+    if (perf.tier !== 'low') {
       list.push(
         <ChromaticAberration
           key="fringe"
-          offset={new Vector2(0.0005, 0.0004)}
+          offset={new Vector2(0.0012, 0.0009)}
           radialModulation
-          modulationOffset={0.35}
+          modulationOffset={0.25}
         />
       )
     }
+    list.push(<Vignette key="vignette" offset={0.25} darkness={isLight ? 0.5 : 0.7} blendFunction={BlendFunction.NORMAL} />)
     if (perf.tier !== 'low') {
-      list.push(
-        <Noise key="grain" blendFunction={BlendFunction.SOFT_LIGHT} opacity={isLight ? 0.08 : 0.1} />
-      )
+      list.push(<Noise key="grain" blendFunction={BlendFunction.OVERLAY} opacity={isLight ? 0.12 : 0.18} />)
     }
     return list
   }, [perf, theme])

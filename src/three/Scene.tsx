@@ -5,6 +5,7 @@ import type { Theme } from '../theme'
 import type { PerfPreset } from '../utils/devicePerf'
 import { useSceneRig } from './useSceneRig'
 import { SkyGradient, CelestialBody, EndOfRoadLight, SUN_OFFSET, MOON_OFFSET } from './lighting'
+import { installAtmosphere, SKY_HAZE } from './fog'
 import { PostProcessing } from './PostProcessing'
 import { Road } from './Road'
 import { Street } from './Street'
@@ -12,15 +13,12 @@ import { Buildings } from './Buildings'
 import { useFollowShadow } from './shadows'
 
 const THEME_COLORS = {
-  dark: {
-    background: '#000000',
-    fog: '#000000',
-  },
-  light: {
-    background: '#ffffff',
-    fog: '#ffffff',
-  },
+  dark: { fog: SKY_HAZE.dark },
+  light: { fog: SKY_HAZE.light },
 }
+
+// Ground mist on top of the distance fog, for every material (see fog.ts).
+installAtmosphere()
 
 interface SceneProps {
   /** Scroll progress (0 to 1), read once per frame. */
@@ -67,17 +65,17 @@ export const Scene = memo(function Scene({
       <SkyGradient theme={theme} />
       {/* Thin haze: the near city is crisp, the skyline fades out over a couple of hundred units
           and the landmarks stand half-veiled behind it. */}
-      <fogExp2 attach="fog" args={[colors.fog, isLight ? 0.0068 : 0.0085]} />
+      <fogExp2 attach="fog" args={[colors.fog, isLight ? 0.0082 : 0.0105]} />
 
       {/* Sky and ground bounce instead of a flat ambient term: tops of things lighter than their
           undersides, as outdoors. */}
-      <hemisphereLight args={[isLight ? '#ffffff' : '#9a9a9a', isLight ? '#7a7a7a' : '#111111', isLight ? 0.75 : 0.12]} />
+      <hemisphereLight args={[isLight ? '#dfe8f2' : '#7f90ad', isLight ? '#8a7f70' : '#1a1611', isLight ? 0.8 : 0.32]} />
 
       {/* Primary directional light aligned with sun/moon – casts onto road and buildings */}
       <directionalLight
         ref={mainLightRef}
-        intensity={isLight ? 2.6 : 2.2}
-        color="#ffffff"
+        intensity={isLight ? 2.7 : 2.6}
+        color={isLight ? '#fff0d9' : '#b9c9e6'}
         castShadow
         shadow-mapSize-width={perf.shadowMapSize}
         shadow-mapSize-height={perf.shadowMapSize}

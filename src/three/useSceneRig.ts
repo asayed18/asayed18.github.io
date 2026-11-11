@@ -25,6 +25,12 @@ const REST_DISTANCE_SQ = REST_DISTANCE * REST_DISTANCE
 const PORTRAIT_TURN = THREE.MathUtils.degToRad(14)
 const UP = new THREE.Vector3(0, 1, 0)
 
+/**
+ * What the camera is focused on, for the depth of field: the point it looks at, and how deep
+ * the sharp zone around it is (shallow on a building, deep while cruising down the road).
+ */
+export const cameraFocus = { target: new THREE.Vector3(0, 0, LOOK_AHEAD), range: 60 }
+
 export function useSceneRig({ progressRef, activeExperienceId, experiences }: SceneRigInput) {
   const camera = useThree((state) => state.camera)
 
@@ -84,6 +90,8 @@ export function useSceneRig({ progressRef, activeExperienceId, experiences }: Sc
     if (smoothLookAt.current.distanceToSquared(targetLook.current) > REST_DISTANCE_SQ) moving = true
 
     camera.lookAt(smoothLookAt.current)
+    cameraFocus.target.copy(smoothLookAt.current)
+    cameraFocus.range = activeData ? 45 : 90
 
     // Ask for the next frame only while the camera is still travelling.
     if (moving) keepRendering(state)

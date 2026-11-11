@@ -99,6 +99,8 @@ export const Street = memo(function Street({ theme }: StreetProps) {
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
+        // Additive light: fogging it would add the fog colour on top of the road.
+        fog: false,
       }),
     }),
     []
@@ -112,14 +114,15 @@ export const Street = memo(function Street({ theme }: StreetProps) {
   )
 
   useLayoutEffect(() => {
-    materials.sidewalk.color.set(isLight ? '#d4d4d4' : '#1c1c1c')
-    materials.paint.color.set(isLight ? '#f4f4f4' : '#8a8a8a')
-    materials.metal.color.set(isLight ? '#5a5a5a' : '#2a2a2a')
+    materials.sidewalk.color.set(isLight ? '#d6d1c8' : '#1e1c1a')
+    materials.paint.color.set(isLight ? '#f4f1ea' : '#8c8778')
+    materials.metal.color.set(isLight ? '#4f5458' : '#26292c')
     materials.head.color.set(isLight ? '#e6e6e6' : '#ffffff')
-    materials.head.emissive.set(isLight ? '#000000' : '#ffffff')
-    materials.head.emissiveIntensity = isLight ? 0 : 2.2
-    materials.glow.color.set('#ffffff')
-    materials.glow.opacity = isLight ? 0 : 0.16
+    // Warm sodium-white street light at night.
+    materials.head.emissive.set(isLight ? '#000000' : '#ffd9a0')
+    materials.head.emissiveIntensity = isLight ? 0 : 2.4
+    materials.glow.color.set('#ffcf8f')
+    materials.glow.opacity = isLight ? 0 : 0.2
     materials.glow.visible = !isLight
   }, [isLight, materials])
 
