@@ -1,8 +1,18 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import type { WebGLRenderer } from 'three'
-import { EffectComposer, SSAO, Vignette, Bloom } from '@react-three/postprocessing'
-import { BlendFunction, type EffectComposer as EffectComposerImpl } from 'postprocessing'
+import { Vector2, type WebGLRenderer } from 'three'
+import {
+  EffectComposer,
+  N8AO,
+  Vignette,
+  Bloom,
+  SMAA,
+  ToneMapping,
+  HueSaturation,
+  Noise,
+  ChromaticAberration,
+} from '@react-three/postprocessing'
+import { BlendFunction, ToneMappingMode, type EffectComposer as EffectComposerImpl } from 'postprocessing'
 import type { PerfPreset } from '../utils/devicePerf'
 import type { Theme } from '../theme'
 import { takeContinuous } from './pacing'
@@ -190,21 +200,28 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
   }, 2)
 
   // A stable array: the composer rebuilds its passes whenever its children change identity.
+  //
+  // The chain, as a camera would see it:
+  // - N8AO: ambient occlusion in the corners, under the cornices and where the blocks meet the
+  //   street (half resolution on mid-range GPUs).
+  // - Bloom on the lit windows, lamps and the moon; filmic tone mapping rolls off the highlights
+  //   at night instead of clipping them. Saturation is pinned to zero: the city stays black and
+  //   white whatever a texture or a light brings in.
+  // - SMAA on the tone-mapped image, then a trace of lens fringing on fast GPUs, vignetting and
+  //   film grain last so the antialiasing never smears the grain.
   const effects = useMemo(() => {
+    const isLight = theme === 'light'
     const list: JSX.Element[] = []
     if (perf.enableSSAO) {
       list.push(
-        <SSAO
-          key="ssao"
-          blendFunction={BlendFunction.MULTIPLY}
-          samples={perf.ssaoSamples}
-          radius={0.9}
-          intensity={40}
-          luminanceInfluence={0.9}
-          worldDistanceThreshold={12}
-          worldDistanceFalloff={3}
-          worldProximityThreshold={0.8}
-          worldProximityFalloff={0.2}
+        <N8AO
+          key="ao"
+          aoRadius={2.6}
+          distanceFalloff={1.1}
+          intensity={isLight ? 2.4 : 1.6}
+          quality={perf.tier === 'high' ? 'medium' : 'low'}
+          halfRes={perf.tier !== 'high'}
+          depthAwareUpsampling
         />
       )
     }
@@ -212,21 +229,33 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
       list.push(
         <Bloom
           key="bloom"
-          intensity={theme === 'light' ? 0.2 : 0.6}
-          luminanceThreshold={theme === 'light' ? 0.6 : 0.35}
-          luminanceSmoothing={0.3}
+          intensity={isLight ? 0.25 : 0.75}
+          luminanceThreshold={isLight ? 0.75 : 0.4}
+          luminanceSmoothing={0.35}
           mipmapBlur
+          radius={0.75}
         />
       )
     }
-    list.push(
-      <Vignette
-        key="vignette"
-        offset={theme === 'light' ? 0.4 : 0.35}
-        darkness={theme === 'light' ? 0.45 : 0.5}
-        blendFunction={BlendFunction.NORMAL}
-      />
-    )
+    list.push(<HueSaturation key="bw" saturation={-1} />)
+    if (!isLight) list.push(<ToneMapping key="tone" mode={ToneMappingMode.ACES_FILMIC} />)
+    list.push(<Vignette key="vignette" offset={0.3} darkness={isLight ? 0.38 : 0.55} blendFunction={BlendFunction.NORMAL} />)
+    if (perf.tier !== 'low') list.push(<SMAA key="smaa" />)
+    if (perf.tier === 'high') {
+      list.push(
+        <ChromaticAberration
+          key="fringe"
+          offset={new Vector2(0.0005, 0.0004)}
+          radialModulation
+          modulationOffset={0.35}
+        />
+      )
+    }
+    if (perf.tier !== 'low') {
+      list.push(
+        <Noise key="grain" blendFunction={BlendFunction.SOFT_LIGHT} opacity={isLight ? 0.08 : 0.1} />
+      )
+    }
     return list
   }, [perf, theme])
 
@@ -237,8 +266,6 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
       ref={composerRef}
       enabled={compiled}
       multisampling={0}
-      enableNormalPass={perf.enableSSAO}
-      resolutionScale={perf.enableSSAO ? 1 : undefined}
     >
       {effects}
     </EffectComposer>

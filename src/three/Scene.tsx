@@ -1,6 +1,5 @@
 import { memo, useEffect, type MutableRefObject } from 'react'
 import { useThree } from '@react-three/fiber'
-import type * as THREE from 'three'
 import type { Experience } from '../data/experiences'
 import type { Theme } from '../theme'
 import type { PerfPreset } from '../utils/devicePerf'
@@ -10,8 +9,7 @@ import { PostProcessing } from './PostProcessing'
 import { Road } from './Road'
 import { Street } from './Street'
 import { Buildings } from './Buildings'
-import { useStaticShadow } from './shadows'
-import { ROAD_LENGTH } from './config'
+import { useFollowShadow } from './shadows'
 
 const THEME_COLORS = {
   dark: {
@@ -56,37 +54,42 @@ export const Scene = memo(function Scene({
     invalidate()
   }, [activeExperienceId, theme, invalidate])
 
-  // The sun/moon light and the city are static, so its shadow map is rendered once per theme
-  // instead of once per frame.
-  const mainLightRef = useStaticShadow<THREE.DirectionalLight>([theme])
+  // The sun/moon light. Its shadow covers the stretch of city around the camera and is rendered
+  // again only when the camera moves on to the next stretch.
+  const isLight = theme === 'light'
+  const lightOffset = isLight ? SUN_OFFSET : MOON_OFFSET
+  const mainLightRef = useFollowShadow(lightOffset, [theme])
 
   const colors = THEME_COLORS[theme]
 
   return (
     <>
       <SkyGradient theme={theme} />
-      <fogExp2 attach="fog" args={[colors.fog, theme === 'light' ? 0.014 : 0.035]} />
+      {/* Thin haze: the near city is crisp, the skyline fades out over a couple of hundred units
+          and the landmarks stand half-veiled behind it. */}
+      <fogExp2 attach="fog" args={[colors.fog, isLight ? 0.0068 : 0.0085]} />
 
-      <ambientLight intensity={theme === 'light' ? 0.3 : 0.02} />
+      {/* Sky and ground bounce instead of a flat ambient term: tops of things lighter than their
+          undersides, as outdoors. */}
+      <hemisphereLight args={[isLight ? '#ffffff' : '#9a9a9a', isLight ? '#7a7a7a' : '#111111', isLight ? 0.75 : 0.12]} />
 
       {/* Primary directional light aligned with sun/moon – casts onto road and buildings */}
       <directionalLight
         ref={mainLightRef}
-        position={theme === 'light' ? [SUN_OFFSET.x, SUN_OFFSET.y, SUN_OFFSET.z] : [MOON_OFFSET.x, MOON_OFFSET.y, MOON_OFFSET.z]}
-        intensity={theme === 'light' ? 2.5 : 3.5}
+        intensity={isLight ? 2.6 : 2.2}
         color="#ffffff"
         castShadow
         shadow-mapSize-width={perf.shadowMapSize}
         shadow-mapSize-height={perf.shadowMapSize}
-        shadow-camera-near={0.5}
-        shadow-camera-far={120}
-        shadow-camera-left={-45}
-        shadow-camera-right={45}
-        shadow-camera-top={45}
-        shadow-camera-bottom={-45}
-        shadow-bias={-0.0002}
-        shadow-normalBias={0.02}
-        shadow-radius={perf.tier === 'high' ? 8 : 4}
+        shadow-camera-near={1}
+        shadow-camera-far={160}
+        shadow-camera-left={-55}
+        shadow-camera-right={55}
+        shadow-camera-top={55}
+        shadow-camera-bottom={-55}
+        shadow-bias={-0.0003}
+        shadow-normalBias={0.03}
+        shadow-radius={perf.tier === 'high' ? 6 : 3}
       />
 
       {/* Fill from the opposite side – softens building shadows. It casts no shadow: its default
@@ -94,16 +97,15 @@ export const Scene = memo(function Scene({
           camera's view, so the extra shadow pass and lookup never changed a visible pixel. */}
       <directionalLight
         position={theme === 'light' ? [-8, 20, -15] : [8, 20, -15]}
-        intensity={theme === 'light' ? 0.65 : 0.55}
+        intensity={theme === 'light' ? 0.45 : 0.25}
       />
 
       <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />
-      <Road length={ROAD_LENGTH} theme={theme} />
-      <Street roadLength={ROAD_LENGTH} theme={theme} />
+      <Road theme={theme} />
+      <Street theme={theme} />
       <EndOfRoadLight />
 
       <Buildings
-        roadLength={ROAD_LENGTH}
         experiences={experiences}
         activeExperienceId={activeExperienceId}
         theme={theme}

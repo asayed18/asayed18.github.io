@@ -88,8 +88,8 @@ export function setFacadeTheme(u: FacadeUniforms, isLight: boolean, isActive = f
   } else {
     u.uGlassColor.value.set(isActive ? '#1a1a1a' : '#060606')
     u.uFrameTone.value = 1.7
-    u.uLitRatio.value = isActive ? 0.85 : 0.2
-    u.uLitStrength.value = isActive ? 1.6 : 0.55
+    u.uLitRatio.value = isActive ? 0.7 : 0.2
+    u.uLitStrength.value = isActive ? 1.05 : 0.55
     u.uLitColor.value.set('#f2f2f2')
   }
 }

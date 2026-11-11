@@ -2,6 +2,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { Theme } from '../theme'
 import { ROAD_WIDTH, SIDEWALK_WIDTH } from './config'
+import { ROAD_LEAD_IN, ROAD_LEAD_OUT, ROAD_LENGTH, roadFrame } from './path'
+import { sweepProfile } from './sweep'
 
 /** Distance between two street lamps on the same side. */
 const LAMP_SPACING = 14
@@ -31,28 +33,60 @@ function createGlowTexture(): THREE.CanvasTexture {
 }
 
 interface StreetProps {
-  roadLength: number
   theme: Theme
 }
+
+/** Length of one dash of the centre line, and of the gap after it. */
+const DASH = 3
+const DASH_GAP = 4
 
 /**
  * Sidewalks with curbs and a row of street lamps on both sides of the road. All lamps share four
  * instanced draws. They add no real lights (a light per lamp would cost far too much): the lamp
  * heads glow through the bloom pass and a soft additive decal lights the road below them.
  */
-export const Street = memo(function Street({ roadLength, theme }: StreetProps) {
+export const Street = memo(function Street({ theme }: StreetProps) {
   const isLight = theme === 'light'
 
   const lamps = useMemo(() => {
-    const result: { x: number; z: number; side: number }[] = []
-    const x = ROAD_WIDTH / 2 + 0.45
-    for (let z = 6; z < roadLength - 4; z += LAMP_SPACING) {
-      result.push({ x, z, side: 1 })
+    const result: { side: number; frame: ReturnType<typeof roadFrame> }[] = []
+    for (let d = 6 - ROAD_LEAD_IN; d < ROAD_LENGTH + ROAD_LEAD_OUT - 4; d += LAMP_SPACING) {
+      result.push({ side: 1, frame: roadFrame(d) })
       // Staggered on the other side, like a real street.
-      result.push({ x: -x, z: z + LAMP_SPACING / 2, side: -1 })
+      result.push({ side: -1, frame: roadFrame(d + LAMP_SPACING / 2) })
     }
     return result
-  }, [roadLength])
+  }, [])
+
+  // Sidewalks with their curbs, and the painted lines, swept along the curve of the road.
+  const geometries = useMemo(() => {
+    const hw = ROAD_WIDTH / 2
+    const range = { from: -ROAD_LEAD_IN, to: ROAD_LENGTH + ROAD_LEAD_OUT, step: 1 }
+    const sidewalk = sweepProfile(
+      [
+        { l0: hw, y0: 0, l1: hw, y1: CURB_HEIGHT },
+        { l0: hw, y0: CURB_HEIGHT, l1: hw + SIDEWALK_WIDTH, y1: CURB_HEIGHT },
+        { l0: -hw, y0: CURB_HEIGHT, l1: -hw, y1: 0 },
+        { l0: -hw - SIDEWALK_WIDTH, y0: CURB_HEIGHT, l1: -hw, y1: CURB_HEIGHT },
+      ],
+      { ...range, tile: 1.2 }
+    )
+    const line = hw - 0.35
+    const edges = sweepProfile(
+      [
+        { l0: line - 0.06, y0: 0.004, l1: line + 0.06, y1: 0.004 },
+        { l0: -line - 0.06, y0: 0.004, l1: -line + 0.06, y1: 0.004 },
+      ],
+      range
+    )
+    const centre = sweepProfile([{ l0: -0.07, y0: 0.004, l1: 0.07, y1: 0.004 }], {
+      ...range,
+      step: 0.5,
+      keep: (d) => ((d % (DASH + DASH_GAP)) + DASH + DASH_GAP) % (DASH + DASH_GAP) < DASH,
+    })
+    return { sidewalk, edges, centre }
+  }, [])
+  useEffect(() => () => Object.values(geometries).forEach((g) => g.dispose()), [geometries])
 
   const materials = useMemo(
     () => ({
@@ -96,33 +130,40 @@ export const Street = memo(function Street({ roadLength, theme }: StreetProps) {
 
   useLayoutEffect(() => {
     const dummy = new THREE.Object3D()
-    const set = (mesh: THREE.InstancedMesh | null, fill: (i: number, lamp: (typeof lamps)[number]) => void) => {
+    const base = new THREE.Matrix4()
+    const up = new THREE.Vector3(0, 1, 0)
+    const set = (
+      mesh: THREE.InstancedMesh | null,
+      fill: (i: number, lamp: { x: number; side: number }) => void
+    ) => {
       if (!mesh) return
       lamps.forEach((lamp, i) => {
         dummy.position.set(0, 0, 0)
         dummy.rotation.set(0, 0, 0)
         dummy.scale.set(1, 1, 1)
-        fill(i, lamp)
+        // Laid out in the road's own frame: x across the road, z along it.
+        fill(i, { x: lamp.side * (ROAD_WIDTH / 2 + 0.45), side: lamp.side })
         dummy.updateMatrix()
-        mesh.setMatrixAt(i, dummy.matrix)
+        base.makeRotationAxis(up, lamp.frame.yaw).setPosition(lamp.frame.point)
+        mesh.setMatrixAt(i, base.multiply(dummy.matrix))
       })
       mesh.instanceMatrix.needsUpdate = true
       mesh.computeBoundingSphere()
     }
     set(poleRef.current, (_, l) => {
-      dummy.position.set(l.x, CURB_HEIGHT, l.z)
+      dummy.position.set(l.x, CURB_HEIGHT, 0)
       dummy.scale.set(1, LAMP_HEIGHT, 1)
     })
     set(armRef.current, (_, l) => {
-      dummy.position.set(l.x - (l.side * ARM_LENGTH) / 2, CURB_HEIGHT + LAMP_HEIGHT - 0.04, l.z)
+      dummy.position.set(l.x - (l.side * ARM_LENGTH) / 2, CURB_HEIGHT + LAMP_HEIGHT - 0.04, 0)
       dummy.scale.set(ARM_LENGTH, 0.06, 0.08)
     })
     set(headRef.current, (_, l) => {
-      dummy.position.set(l.x - l.side * (ARM_LENGTH - 0.15), CURB_HEIGHT + LAMP_HEIGHT - 0.12, l.z)
+      dummy.position.set(l.x - l.side * (ARM_LENGTH - 0.15), CURB_HEIGHT + LAMP_HEIGHT - 0.12, 0)
       dummy.scale.set(0.5, 0.08, 0.22)
     })
     set(glowRef.current, (_, l) => {
-      dummy.position.set(l.x - l.side * (ARM_LENGTH - 0.15), 0.02, l.z)
+      dummy.position.set(l.x - l.side * (ARM_LENGTH - 0.15), 0.02, 0)
       dummy.rotation.set(-Math.PI / 2, 0, 0)
       dummy.scale.set(7, 7, 1)
     })
@@ -131,31 +172,11 @@ export const Street = memo(function Street({ roadLength, theme }: StreetProps) {
   const glowGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
   useEffect(() => () => glowGeometry.dispose(), [glowGeometry])
 
-  const sidewalkX = ROAD_WIDTH / 2 + SIDEWALK_WIDTH / 2
-
   return (
     <group>
-      {/* Painted edge lines, just inside the curbs. */}
-      {[-1, 1].map((side) => (
-        <mesh
-          key={`line-${side}`}
-          material={materials.paint}
-          position={[side * (ROAD_WIDTH / 2 - 0.35), 0.005, roadLength / 2]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          scale={[0.12, roadLength, 1]}
-          geometry={glowGeometry}
-        />
-      ))}
-      {[-1, 1].map((side) => (
-        <mesh
-          key={side}
-          geometry={UNIT_BOX}
-          material={materials.sidewalk}
-          position={[side * sidewalkX, CURB_HEIGHT / 2, roadLength / 2]}
-          scale={[SIDEWALK_WIDTH, CURB_HEIGHT, roadLength]}
-          receiveShadow
-        />
-      ))}
+      <mesh geometry={geometries.sidewalk} material={materials.sidewalk} receiveShadow />
+      <mesh geometry={geometries.edges} material={materials.paint} receiveShadow />
+      <mesh geometry={geometries.centre} material={materials.paint} receiveShadow />
       <instancedMesh ref={poleRef} args={[POLE, materials.metal, lamps.length]} castShadow />
       <instancedMesh ref={armRef} args={[UNIT_BOX, materials.metal, lamps.length]} />
       <instancedMesh ref={headRef} args={[UNIT_BOX, materials.head, lamps.length]} />

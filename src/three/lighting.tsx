@@ -3,7 +3,8 @@ import { useFrame } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js'
-import { END_LIGHT_HEIGHT, ROAD_LENGTH } from './config'
+import { END_LIGHT_HEIGHT } from './config'
+import { ROAD_LENGTH, roadFrame } from './path'
 import { useStaticShadow } from './shadows'
 
 const MOON_TEXTURE_URL = '/textures/moon.webp'
@@ -338,7 +339,8 @@ export function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; se
     const cam = state.camera.position
     const skyY = isLight ? 30 : 16
     const ahead = 55
-    _pos.current.set(0, cam.y + skyY, cam.z + ahead)
+    // A fixed direction from the camera, as for a body infinitely far away.
+    _pos.current.set(cam.x, cam.y + skyY, cam.z + ahead)
     groupRef.current.position.copy(_pos.current)
     if (discRef.current) {
       discRef.current.lookAt(cam.x, cam.y, cam.z)
@@ -410,7 +412,11 @@ export function CelestialBody({ isLight, segments = 16 }: { isLight: boolean; se
   )
 }
 
-const END_LIGHT_POSITION: [number, number, number] = [-20, END_LIGHT_HEIGHT, ROAD_LENGTH]
+const END_LIGHT_POSITION: [number, number, number] = (() => {
+  const f = roadFrame(ROAD_LENGTH)
+  const p = f.point.clone().addScaledVector(f.left, -20)
+  return [p.x, END_LIGHT_HEIGHT, p.z]
+})()
 
 export function EndOfRoadLight() {
   // The light and everything it shines on are static, so its six shadow passes are baked once.

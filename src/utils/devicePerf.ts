@@ -15,14 +15,10 @@ export interface PerfPreset {
   shadowMapSize: number
   /** Enable shadow casting on active experience buildings */
   buildingShadows: boolean
-  /** SSAO sample count */
-  ssaoSamples: number
   /** Enable bloom post-processing */
   enableBloom: boolean
-  /** Enable SSAO post-processing */
+  /** Enable ambient occlusion (N8AO) */
   enableSSAO: boolean
-  /** Background building count per side per row */
-  buildingCount: number
   /** Sphere segment count for celestial body */
   celestialSegments: number
   /** Enable shadows on the renderer */
@@ -35,10 +31,8 @@ const PRESETS: Record<PerfTier, PerfPreset> = {
     dpr: [1, 1],
     shadowMapSize: 256,
     buildingShadows: false,
-    ssaoSamples: 0,
     enableBloom: false,
     enableSSAO: false,
-    buildingCount: 50,
     celestialSegments: 8,
     enableShadows: false,
   },
@@ -47,10 +41,8 @@ const PRESETS: Record<PerfTier, PerfPreset> = {
     dpr: [1, 1.5],
     shadowMapSize: 512,
     buildingShadows: true,
-    ssaoSamples: 32,
     enableBloom: true,
     enableSSAO: true,
-    buildingCount: 50,
     celestialSegments: 24,
     enableShadows: 'soft',
   },
@@ -59,10 +51,8 @@ const PRESETS: Record<PerfTier, PerfPreset> = {
     dpr: [1, 2],
     shadowMapSize: 1024,
     buildingShadows: true,
-    ssaoSamples: 64,
     enableBloom: true,
     enableSSAO: true,
-    buildingCount: 150,
     celestialSegments: 32,
     enableShadows: 'soft',
   },

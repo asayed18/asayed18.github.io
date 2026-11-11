@@ -6,23 +6,30 @@ import * as THREE from 'three'
 import type { Experience } from '../data/experiences'
 import type { Theme } from '../theme'
 import type { PerfPreset } from '../utils/devicePerf'
-import { ROAD_WIDTH, BACKGROUND_SIDE_OFFSET, SIDEWALK_WIDTH } from './config'
+import { ROAD_WIDTH } from './config'
 import { parsePeriodMonths, monthsToHeight } from './period'
-import { useStaticShadow } from './shadows'
 import { keepRendering, MAX_EASING_STEP } from './pacing'
 import {
   applyFacade,
   createFacadeUniforms,
   setFacadeTheme,
-  facadeBays,
   FACADE_STYLE,
   CITY_FLOOR_HEIGHT,
   PARAPET_HEIGHT,
   type FacadeStyle,
 } from './facade'
 import { useCityEnvironment } from './environment'
+import { EXPERIENCE_LATERAL, ROAD_LENGTH, roadFrame } from './path'
+import {
+  generateCity,
+  TOWER_HEIGHT,
+  TOWER_SPHERE_AT,
+  type BuildingSpec,
+  type CityDensity,
+  type DetailBox,
+  type Pyramid,
+} from './cityLayout'
 
-const SIDE_OFFSET = BACKGROUND_SIDE_OFFSET
 const BUILDING_WIDTH = 5
 
 /**
@@ -41,14 +48,14 @@ const EXPERIENCE_STYLES: FacadeStyle[] = [
   FACADE_STYLE.curtain,
   FACADE_STYLE.brick,
   FACADE_STYLE.ribbon,
-  FACADE_STYLE.curtain,
+  FACADE_STYLE.ribbon,
 ]
 
-interface Box {
-  pos: [number, number, number]
-  scale: [number, number, number]
-  /** Tilt around the z axis (awnings). */
-  rotZ?: number
+/** City size per performance tier: the skyline grid spacing and how far out it reaches. */
+const DENSITY: Record<PerfPreset['tier'], CityDensity> = {
+  low: { skylineCell: 19, skylineReach: 170 },
+  medium: { skylineCell: 14, skylineReach: 210 },
+  high: { skylineCell: 12, skylineReach: 235 },
 }
 
 /** Any number of boxes sharing one material, in a single draw. */
@@ -57,7 +64,7 @@ const BoxInstances = memo(function BoxInstances({
   material,
   castShadow = false,
 }: {
-  boxes: Box[]
+  boxes: DetailBox[]
   material: THREE.Material
   castShadow?: boolean
 }) {
@@ -68,12 +75,13 @@ const BoxInstances = memo(function BoxInstances({
     const dummy = new THREE.Object3D()
     boxes.forEach((box, i) => {
       dummy.position.set(...box.pos)
-      dummy.rotation.set(0, 0, box.rotZ ?? 0)
+      dummy.rotation.set(0, box.yaw, box.rotZ ?? 0)
       dummy.scale.set(...box.scale)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
     })
     mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
   }, [boxes])
   if (boxes.length === 0) return null
   return (
@@ -83,113 +91,210 @@ const BoxInstances = memo(function BoxInstances({
       args={[UNIT_BOX_GEOMETRY, material, boxes.length]}
       castShadow={castShadow}
       receiveShadow
-      frustumCulled={false}
+    />
+  )
+})
+
+/** One instanced draw for a whole district of blocks, each with its own facade. */
+const CityBlocks = memo(function CityBlocks({
+  specs,
+  material,
+  castShadow,
+}: {
+  specs: BuildingSpec[]
+  material: THREE.Material
+  castShadow: boolean
+}) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  // Own geometry: it carries one facade description per instance (the shader's `aFacade`).
+  const geometry = useMemo(() => {
+    const g = new THREE.BoxGeometry(1, 1, 1)
+    const facade = new Float32Array(specs.length * 3)
+    specs.forEach((b, i) => facade.set([b.floorH, b.bay, b.style], i * 3))
+    g.setAttribute('aFacade', new THREE.InstancedBufferAttribute(facade, 3))
+    return g
+  }, [specs])
+  useEffect(() => () => geometry.dispose(), [geometry])
+
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const dummy = new THREE.Object3D()
+    const color = new THREE.Color()
+    specs.forEach((b, i) => {
+      dummy.position.set(b.x, b.y0 + b.h / 2, b.z)
+      dummy.rotation.set(0, b.yaw, 0)
+      dummy.scale.set(b.w, b.h, b.d).multiplyScalar(1 - 2 * PLASTER_INSET)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+      mesh.setColorAt(i, color.setScalar(b.tone))
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    mesh.computeBoundingSphere()
+  }, [specs])
+
+  if (specs.length === 0) return null
+  return (
+    <instancedMesh
+      key={specs.length}
+      ref={ref}
+      args={[geometry, material, specs.length]}
+      castShadow={castShadow}
+      receiveShadow
     />
   )
 })
 
 interface BuildingsProps {
-  roadLength: number
   experiences: Experience[]
   activeExperienceId: string | null
   theme: Theme
   perf: PerfPreset
 }
 
-/* Giza Pyramids landmark (far behind the first experience building) */
-const GizaPyramids = memo(function GizaPyramids({ theme }: { theme: Theme }) {
+/**
+ * The Giza pyramids: a square base 1.57 times the height, in weathered limestone. At night they are
+ * floodlit, as they are for real.
+ */
+const GizaPyramids = memo(function GizaPyramids({ pyramids, theme }: { pyramids: Pyramid[]; theme: Theme }) {
   const isLight = theme === 'light'
-  // Moonlit stone at night: dark, but clearly lighter than the night sky behind it.
-  const stoneColor = isLight ? '#222222' : '#3a3a3a'
-  const stoneEmissive = isLight ? '#111111' : '#1c1c1c'
+  // Courses of weathered limestone blocks, painted once on a canvas.
+  const stone = useMemo(() => {
+    const size = 256
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#bdbdbd'
+    ctx.fillRect(0, 0, size, size)
+    const courses = 48
+    for (let i = 0; i < courses; i++) {
+      const y = (i / courses) * size
+      ctx.fillStyle = `rgba(0,0,0,${0.22 + 0.15 * Math.abs(Math.sin(i * 7.3))})`
+      ctx.fillRect(0, y, size, 1.2)
+      // Block joints and wear along the course.
+      for (let x = 0; x < size; x += 6 + ((i * 13 + x) % 7)) {
+        ctx.fillStyle = `rgba(${(x * 31 + i * 17) % 2 ? '255,255,255' : '0,0,0'},${0.04 + ((x * 7 + i) % 5) * 0.015})`
+        ctx.fillRect(x, y + 1.2, 6, size / courses - 1.2)
+      }
+    }
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.anisotropy = 4
+    return texture
+  }, [])
+  const material = useMemo(
+    () => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95, map: stone }),
+    [stone]
+  )
+  const sand = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 1 }), [])
+  useLayoutEffect(() => {
+    material.color.set(isLight ? '#9a9a9a' : '#3e3e3e')
+    material.emissive.set(isLight ? '#000000' : '#1c1c1c')
+    material.emissiveMap = isLight ? null : stone
+    material.needsUpdate = true
+    sand.color.set(isLight ? '#c6c6c6' : '#141414')
+  }, [isLight, material, sand, stone])
+  useEffect(
+    () => () => {
+      material.dispose()
+      sand.dispose()
+      stone.dispose()
+    },
+    [material, sand, stone]
+  )
+  const cone = useMemo(() => new THREE.ConeGeometry(1, 1, 4, 1), [])
+  useEffect(() => () => cone.dispose(), [cone])
+  const centre = useMemo(() => {
+    const c = { x: 0, z: 0, r: 0 }
+    pyramids.forEach((p) => {
+      c.x += p.x / pyramids.length
+      c.z += p.z / pyramids.length
+    })
+    pyramids.forEach((p) => (c.r = Math.max(c.r, Math.hypot(p.x - c.x, p.z - c.z) + p.radius * 1.4)))
+    return c
+  }, [pyramids])
 
-  const pyramids: { x: number; z: number; height: number; radius: number }[] = [
-    { x: 50, z: -59, height: 20, radius: 20 },
-    { x: 55, z: -20, height: 35, radius: 35 },
-  ]
-
+  if (pyramids.length === 0) return null
   return (
     <group>
+      {/* The plateau: bare sand instead of paving. */}
+      <mesh position={[centre.x, -0.04, centre.z]} rotation={[-Math.PI / 2, 0, 0]} material={sand} receiveShadow>
+        <circleGeometry args={[centre.r, 48]} />
+      </mesh>
       {pyramids.map((p, i) => (
         <mesh
-          key={`pyramid-${i}`}
-          position={[p.x + 20, p.height / 2, p.z + 60]}
-          rotation={[0, Math.PI / 4, 0]}
+          key={i}
+          geometry={cone}
+          material={material}
+          position={[p.x, p.height / 2, p.z]}
+          rotation={[0, p.yaw, 0]}
+          scale={[p.radius, p.height, p.radius]}
           castShadow
           receiveShadow
-        >
-          <coneGeometry args={[p.radius, p.height, 4]} />
-          <meshStandardMaterial
-            color={stoneColor}
-            emissive={stoneEmissive}
-            emissiveIntensity={0.5}
-            flatShading
-          />
-        </mesh>
+        />
       ))}
     </group>
   )
 })
 
-/* Berlin Fernsehturm (TV Tower) landmark behind the fifth experience */
-const BerlinTVTower = memo(function BerlinTVTower({ theme }: { theme: Theme }) {
+/** The Berlin Fernsehturm: concrete shaft, the steel sphere with its window band, the antenna. */
+const BerlinTVTower = memo(function BerlinTVTower({ x, z, theme }: { x: number; z: number; theme: Theme }) {
   const isLight = theme === 'light'
-  const towerColor = isLight ? '#333333' : '#3a3a3a'
-  const towerEmissive = isLight ? '#222222' : '#1e1e1e'
+  const H = TOWER_HEIGHT
+  const sphereY = H * TOWER_SPHERE_AT
+  const sphereR = 5.4
+  const shaftTop = sphereY - sphereR * 0.6
+  const antennaBase = sphereY + sphereR + 7
 
-  const shaftHeight = 40
-  const shaftRadiusBottom = 2.2
-  const shaftRadiusTop = 1.1
-  const sphereRadius = 6
-  const sphereY = shaftHeight * 0.72
-  const antennaHeight = 16
-  const antennaY = sphereY + sphereRadius + antennaHeight / 2
-
-  const towerX = 30
-  const towerZ = 40
+  const concrete = isLight ? '#9a9a9a' : '#4a4a4a'
+  const steel = isLight ? '#b8b8b8' : '#6a6a6a'
+  const nightGlow = isLight ? '#000000' : '#202020'
 
   return (
-    <group position={[towerX, 0, towerZ]}>
-      <mesh position={[0, shaftHeight / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[shaftRadiusTop, shaftRadiusBottom, shaftHeight, 8]} />
-        <meshStandardMaterial
-          color={towerColor}
-          emissive={towerEmissive}
-          emissiveIntensity={0.5}
-        />
+    <group position={[x, 0, z]}>
+      {/* Base, flaring out to the ground. */}
+      <mesh position={[0, 4, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[2.3, 4.2, 8, 24]} />
+        <meshStandardMaterial color={concrete} emissive={nightGlow} roughness={0.85} />
       </mesh>
-
+      <mesh position={[0, 8 + (shaftTop - 8) / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[1.45, 2.3, shaftTop - 8, 24]} />
+        <meshStandardMaterial color={concrete} emissive={nightGlow} roughness={0.85} />
+      </mesh>
       <mesh position={[0, sphereY, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[sphereRadius, 10, 8]} />
+        <sphereGeometry args={[sphereR, 32, 24]} />
+        <meshStandardMaterial color={steel} emissive={nightGlow} metalness={0.6} roughness={0.35} />
+      </mesh>
+      {/* Window band of the restaurant and the viewing deck, lit at night. */}
+      <mesh position={[0, sphereY - sphereR * 0.18, 0]}>
+        <cylinderGeometry args={[sphereR * 1.005, sphereR * 0.97, 1.5, 32, 1, true]} />
         <meshStandardMaterial
-          color={towerColor}
-          emissive={towerEmissive}
-          emissiveIntensity={0.5}
+          color={isLight ? '#3a3a3a' : '#111111'}
+          emissive="#ffffff"
+          emissiveIntensity={isLight ? 0 : 1.4}
+          roughness={0.2}
+          metalness={0.5}
         />
       </mesh>
-
-      <mesh position={[0, sphereY - sphereRadius * 0.7, 0]}>
-        <cylinderGeometry args={[3.8, 3, 2.2, 8]} />
-        <meshStandardMaterial
-          color={towerColor}
-          emissive={towerEmissive}
-          emissiveIntensity={0.5}
-        />
+      {/* Upper shaft and antenna, in bands. */}
+      <mesh position={[0, (sphereY + antennaBase) / 2, 0]}>
+        <cylinderGeometry args={[0.9, 1.2, antennaBase - sphereY, 16]} />
+        <meshStandardMaterial color={concrete} emissive={nightGlow} roughness={0.8} />
       </mesh>
-
+      {Array.from({ length: 6 }, (_, i) => {
+        const len = (H - antennaBase) / 6
+        return (
+          <mesh key={i} position={[0, antennaBase + len * (i + 0.5), 0]}>
+            <cylinderGeometry args={[0.5 - i * 0.06, 0.56 - i * 0.06, len, 8]} />
+            <meshStandardMaterial color={i % 2 ? (isLight ? '#e8e8e8' : '#777777') : isLight ? '#555555' : '#2c2c2c'} roughness={0.6} />
+          </mesh>
+        )
+      })}
       {/* Aviation light on the tip: marks the tower against the night sky. */}
-      <mesh position={[0, antennaY + antennaHeight / 2 + 0.3, 0]}>
+      <mesh position={[0, H + 0.3, 0]}>
         <sphereGeometry args={[0.45, 8, 6]} />
         <meshBasicMaterial color={isLight ? '#555555' : '#ffffff'} toneMapped={false} />
-      </mesh>
-
-      <mesh position={[0, antennaY, 0]}>
-        <cylinderGeometry args={[0.15, 0.4, antennaHeight, 6]} />
-        <meshStandardMaterial
-          color={towerColor}
-          emissive={towerEmissive}
-          emissiveIntensity={0.5}
-        />
       </mesh>
     </group>
   )
@@ -199,10 +304,13 @@ const Logo3D = memo(function Logo3D({
   logoUrl,
   isActive,
   theme,
+  parentYaw,
 }: {
   logoUrl: string
   isActive: boolean
   theme: Theme
+  /** Rotation of the group the sign stands in, so it can turn to face the camera. */
+  parentYaw: number
 }) {
   const isLight = theme === 'light'
   const texture = useTexture(logoUrl)
@@ -251,13 +359,12 @@ const Logo3D = memo(function Logo3D({
 
     groupRef.current.getWorldPosition(worldPos.current)
     const dz = state.camera.position.z - worldPos.current.z
-    if (Math.abs(dz) > 50) return
+    const dx = state.camera.position.x - worldPos.current.x
+    if (dx * dx + dz * dz > 70 * 70) return
 
     const t = state.clock.elapsedTime
     groupRef.current.position.y = signBaseY + Math.sin(t * 0.8) * 0.08
-
-    const dx = state.camera.position.x - worldPos.current.x
-    groupRef.current.rotation.y = Math.atan2(dx, dz)
+    groupRef.current.rotation.y = Math.atan2(dx, dz) - parentYaw
   })
 
   const glow = isActive ? (isLight ? 1.1 : 1.6) : isLight ? 0.75 : 0.9
@@ -468,6 +575,9 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
 interface ActiveBuilding {
   x: number
   z: number
+  yaw: number
+  /** +1 left of the road, -1 right. */
+  side: number
   buildingHeight: number
 }
 
@@ -512,10 +622,15 @@ function ActiveLights({
     // Smooth position interpolation
     group.position.x += (targetX - group.position.x) * k
     group.position.z += (targetZ - group.position.z) * k
+    if (active) {
+      // Turn the shortest way round to the building's orientation.
+      const turn = Math.atan2(Math.sin(active.yaw - group.rotation.y), Math.cos(active.yaw - group.rotation.y))
+      group.rotation.y += turn * k
+    }
 
     // Smooth intensity interpolation
     const targetIntensityTop = active ? (isLight ? 3 : 0.9) : 0
-    const targetIntensityFront = active ? (isLight ? 20.5 : 100) : 0
+    const targetIntensityFront = active ? (isLight ? 14 : 45) : 0
     const targetIntensityLogo = active ? (isLight ? 2 : 4) : 0
 
     if (topLightRef.current) topLightRef.current.intensity += (targetIntensityTop - topLightRef.current.intensity) * k
@@ -551,7 +666,7 @@ function ActiveLights({
 
   // Fixed values to avoid erratic shadow/camera updates
   const height = active ? active.buildingHeight : 10
-  const x = active ? active.x : 10
+  const side = active ? active.side : 1
 
   return (
     <group ref={groupRef}>
@@ -566,7 +681,7 @@ function ActiveLights({
       />
       <pointLight
         ref={frontLightRef}
-        position={[(x > 0 ? -1 : 1) * 5.5, height * 0.5, 0]}
+        position={[-side * 5.5, height * 0.5, 0]}
         color={'#ffffff'}
         intensity={0}
         castShadow={enableShadows}
@@ -587,200 +702,20 @@ function ActiveLights({
   )
 }
 
-export function Buildings({ roadLength, experiences, activeExperienceId, theme, perf }: BuildingsProps) {
+export function Buildings({ experiences, activeExperienceId, theme, perf }: BuildingsProps) {
   const isLight = theme === 'light'
-  const instancedRef = useRef<THREE.InstancedMesh>(null)
-  const city = useMemo(() => {
-    const positions: [number, number, number][] = []
-    const scales: [number, number, number][] = []
-    /** Per building: storey height, bay width, facade style (the shader's `aFacade`). */
-    const params: [number, number, number][] = []
-    /** Per building: brightness multiplier of the wall colour. */
-    const tones: number[] = []
-    const seed = 12345
-    const rand = (i: number) => {
-      const x = Math.sin(seed + i * 0.1) * 10000
-      return x - Math.floor(x)
-    }
-
-    // Keep a clear plaza around each experience building and the pyramids, so the city never
-    // hides them from the camera.
-    const MARGIN = 0.01
-    const zones = experiences.map((exp, index) => {
-      const side = index % 2 === 0 ? 1 : -1
-      return { x: side * (ROAD_WIDTH / 2 + SIDE_OFFSET), z: exp.position * roadLength, hw: 4.5, hd: 6 }
-    })
-    const pyramidZ = experiences[0] ? experiences[0].position * roadLength : 0
-    zones.push({ x: 50, z: pyramidZ, hw: 18, hd: 25 })
-
-    const overlaps = (cx: number, cz: number, hw: number, hd: number) => {
-      for (const zone of zones) {
-        if (Math.abs(cx - zone.x) < hw + zone.hw + MARGIN && Math.abs(cz - zone.z) < hd + zone.hd + MARGIN) return true
-      }
-      for (let j = 0; j < positions.length; j++) {
-        const [px, , pz] = positions[j]
-        const [sw, , sd] = scales[j]
-        if (Math.abs(cx - px) < hw + sw / 2 + MARGIN && Math.abs(cz - pz) < hd + sd / 2 + MARGIN) return true
-      }
-      return false
-    }
-
-    // Sight lines to the landmarks: from the LDC building on, the pyramids rise behind low
-    // buildings on that side; from the Babbel building on, the TV tower stays clear.
-    const ldcZ = experiences[0] ? experiences[0].position * roadLength : -1000
-    const babbelZ = experiences[4] ? experiences[4].position * roadLength : -1000
-    /** Most storeys allowed at a spot (Infinity = no limit). */
-    const maxFloors = (x: number, z: number, frontage: boolean) => {
-      if (x > 0 && z > ldcZ - 25 && z < ldcZ + 85) return frontage ? 3 : x < 45 ? 3 : 0
-      if (x > 0 && z > babbelZ - 10 && z < babbelZ + 60 && x < 60) return frontage ? Infinity : 4
-      return Infinity
-    }
-
-    const pickStyle = (r: number, tall: boolean): FacadeStyle => {
-      if (tall) return r < 0.45 ? FACADE_STYLE.curtain : r < 0.75 ? FACADE_STYLE.ribbon : FACADE_STYLE.punched
-      return r < 0.4 ? FACADE_STYLE.punched : r < 0.75 ? FACADE_STYLE.brick : FACADE_STYLE.ribbon
-    }
-    const bayWidth = (style: FacadeStyle, r: number) =>
-      style === FACADE_STYLE.brick ? 1.05 + 0.2 * r : style === FACADE_STYLE.curtain ? 1.3 : 1.25 + 0.35 * r
-
-    const add = (x: number, z: number, w: number, h: number, d: number, style: FacadeStyle, r: number) => {
-      positions.push([x, h / 2, z])
-      scales.push([w, h, d])
-      params.push([CITY_FLOOR_HEIGHT, bayWidth(style, r), style])
-      tones.push(style === FACADE_STYLE.curtain ? 0.8 + 0.3 * r : 0.72 + 0.5 * rand(r * 9000 + 17))
-    }
-
-    // Street wall: buildings side by side along the sidewalk, as on a real street, with the
-    // occasional alley between them.
-    const frontX = ROAD_WIDTH / 2 + SIDEWALK_WIDTH
-    let n = 0
-    for (const side of [-1, 1]) {
-      let z = -2
-      while (z < roadLength + 6) {
-        const r = rand(n * 13 + 31)
-        const d = 4.2 + rand(n * 13 + 32) * 3.5
-        const w = 5 + rand(n * 13 + 33) * 3
-        const cz = z + d / 2
-        const cx = side * (frontX + w / 2)
-        const floors = Math.min(3 + Math.floor(rand(n * 13 + 34) * 4), maxFloors(cx, cz, true))
-        const h = CITY_FLOOR_HEIGHT * floors + PARAPET_HEIGHT
-        if (!overlaps(cx, cz, w / 2, d / 2)) add(cx, cz, w, h, d, pickStyle(r, false), rand(n * 13 + 35))
-        z += d + (rand(n * 13 + 36) < 0.15 ? 1.6 : 0.02)
-        n++
-      }
-    }
-
-    // Blocks behind the street wall, rising to towers towards the edge of the city.
-    const bCount = perf.buildingCount
-    const rows = [
-      { count: bCount, xMin: 15, xRange: 4, wMin: 4, wRange: 4, dMin: 4, dRange: 4, floors: [4, 9], seedOffset: 400, zJitter: 2 },
-      { count: bCount, xMin: 22, xRange: 6, wMin: 4, wRange: 5, dMin: 4, dRange: 4, floors: [4, 11], seedOffset: 500, zJitter: 2.5 },
-      { count: Math.floor(bCount * 0.7), xMin: 32, xRange: 8, wMin: 5, wRange: 5, dMin: 5, dRange: 4, floors: [5, 14], seedOffset: 10000, zJitter: 3 },
-      { count: Math.floor(bCount * 0.5), xMin: 45, xRange: 12, wMin: 5, wRange: 6, dMin: 5, dRange: 5, floors: [6, 17], seedOffset: 20000, zJitter: 3 },
-    ]
-    for (const row of rows) {
-      for (let i = 0; i < row.count * 2; i++) {
-        const side = i < row.count ? -1 : 1
-        const idx = i < row.count ? i : i - row.count
-        const ri = i + row.seedOffset
-        const w = row.wMin + rand(ri + 3) * row.wRange
-        const wanted = row.floors[0] + Math.floor(rand(ri + 4) * (row.floors[1] - row.floors[0]))
-        const d = row.dMin + rand(ri + 5) * row.dRange
-        for (let attempt = 0; attempt < 20; attempt++) {
-          const rSeed = attempt * 200
-          const x = side * (row.xMin + rand(ri + 1 + rSeed) * row.xRange)
-          const z = 2 + idx * (roadLength / row.count) + rand(ri + 2 + rSeed) * row.zJitter
-          const floors = Math.min(wanted, maxFloors(x, z, false))
-          if (floors < 1) break
-          const h = floors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT
-          if (!overlaps(x, z, w / 2, d / 2)) {
-            add(x, z, w, h, d, pickStyle(rand(ri + 6), floors >= 9), rand(ri + 7))
-            break
-          }
-        }
-      }
-    }
-
-    // Setbacks: some towers continue in a narrower tier on top of their base.
-    const baseCount = positions.length
-    for (let i = 0; i < baseCount; i++) {
-      const [cx, , cz] = positions[i]
-      const [w, h, d] = scales[i]
-      if (h < 20 || rand(i * 5 + 77) < 0.45 || maxFloors(cx, cz, false) !== Infinity) continue
-      const tierFloors = 2 + Math.floor(rand(i * 5 + 78) * 6)
-      const th = tierFloors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT - 0.01
-      // The tier's storeys continue the base's: its height above the ground lines up.
-      positions.push([cx, h - PARAPET_HEIGHT + th / 2, cz])
-      scales.push([w * 0.66, th, d * 0.66])
-      params.push(params[i])
-      tones.push(tones[i])
-    }
-
-    // Cornices along the top of each wall, balconies with railings, storefront awnings.
-    const cornices: Box[] = []
-    const balconies: Box[] = []
-    const railings: Box[] = []
-    const awnings: Box[] = []
-
-    for (let i = 0; i < positions.length; i++) {
-      const [cx, cy, cz] = positions[i]
-      const [w, h, d] = scales[i]
-      const [floorH, bay, style] = params[i]
-      const top = cy + h / 2
-      if (style === FACADE_STYLE.curtain) {
-        cornices.push({ pos: [cx, top - 0.06, cz], scale: [w + 0.06, 0.12, d + 0.06] })
-      } else {
-        cornices.push({ pos: [cx, top - 0.16, cz], scale: [w + 0.36, 0.32, d + 0.36] })
-        cornices.push({ pos: [cx, top - 0.42, cz], scale: [w + 0.16, 0.12, d + 0.16] })
-      }
-
-      // Street-facing details only where people see them: the street wall.
-      const facesRoad = Math.abs(Math.abs(cx) - w / 2 - frontX) < 0.05 && cy - h / 2 < 0.01
-      if (!facesRoad) continue
-      const inward = cx > 0 ? -1 : 1
-      const faceX = cx + inward * (w / 2)
-      const { centers, width } = facadeBays(d, bay)
-      const floors = Math.floor((h - PARAPET_HEIGHT) / floorH)
-
-      centers.forEach((c, k) => {
-        if (rand(i * 31 + k * 7 + 1) < 0.3) {
-          awnings.push({
-            pos: [faceX + inward * 0.34, floorH * 0.8 + 0.1, cz + c],
-            scale: [0.7, 0.03, width * 0.8],
-            rotZ: inward * -0.26,
-          })
-        }
-      })
-      if (style === FACADE_STYLE.punched || style === FACADE_STYLE.brick) {
-        for (let f = 1; f < floors; f++) {
-          centers.forEach((c, k) => {
-            if (rand(i * 97 + f * 11 + k * 3) < 0.55) return
-            const y = f * floorH + floorH * 0.3
-            balconies.push({ pos: [faceX + inward * 0.3, y, cz + c], scale: [0.6, 0.08, width * 0.78] })
-            railings.push({ pos: [faceX + inward * 0.58, y + 0.3, cz + c], scale: [0.03, 0.52, width * 0.78] })
-          })
-        }
-      }
-    }
-
-    return { positions, scales, params, tones, cornices, balconies, railings, awnings }
-  }, [roadLength, experiences, perf.buildingCount])
-  const { positions, scales, params, tones } = city
+  const city = useMemo(() => generateCity(experiences, DENSITY[perf.tier]), [experiences, perf.tier])
 
   const envMap = useCityEnvironment()
   const facade = useMemo(() => createFacadeUniforms(), [])
   const material = useMemo(() => {
-    const m = new THREE.MeshStandardMaterial({
-      envMap,
-      roughness: 0.9,
-      metalness: 0.05,
-    })
+    const m = new THREE.MeshStandardMaterial({ envMap, roughness: 0.9, metalness: 0.05 })
     applyFacade(m, facade)
     return m
   }, [envMap, facade])
 
   const ledgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.85 }), [])
-  const railingMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.7 }), [])
+  const railingMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.2 }), [])
   const awningMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }), [])
 
   // Theme colours are plain uniforms: set them without flagging the materials for a rebuild.
@@ -788,163 +723,117 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
   useLayoutEffect(() => {
     material.color.set(isLight ? '#c8c8c8' : '#383838')
     ledgeMaterial.color.set(isLight ? '#dcdcdc' : '#333333')
-    railingMaterial.color.set(isLight ? '#3a3a3a' : '#151515')
+    railingMaterial.color.set(isLight ? '#8a8a8a' : '#202020')
     awningMaterial.color.set(isLight ? '#a4a4a4' : '#1e1e1e')
     material.envMapIntensity = isLight ? 0.8 : 0.35
     setFacadeTheme(facade, isLight)
   }, [isLight, material, ledgeMaterial, railingMaterial, awningMaterial, facade])
 
-  useEffect(
-    () => () => {
-      railingMaterial.dispose()
-      awningMaterial.dispose()
-    },
-    [railingMaterial, awningMaterial]
-  )
-
-  const dummy = useMemo(() => new THREE.Object3D(), [])
-
-  // Own geometry for the city: it carries one facade description per instance.
-  const cityGeometry = useMemo(() => {
-    const g = new THREE.BoxGeometry(1, 1, 1)
-    g.setAttribute('aFacade', new THREE.InstancedBufferAttribute(new Float32Array(params.flat()), 3))
-    return g
-  }, [params])
-  useEffect(() => () => cityGeometry.dispose(), [cityGeometry])
-
-  useLayoutEffect(() => {
-    const mesh = instancedRef.current
-    if (!mesh) return
-    const color = new THREE.Color()
-    for (let i = 0; i < positions.length; i++) {
-      const [x, y, z] = positions[i]
-      const [sx, sy, sz] = scales[i]
-      dummy.position.set(x, y, z)
-      dummy.scale.set(sx, sy, sz).multiplyScalar(1 - 2 * PLASTER_INSET)
-      dummy.rotation.set(0, 0, 0)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-      mesh.setColorAt(i, color.setScalar(tones[i]))
-    }
-    mesh.count = positions.length
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [positions, scales, tones, dummy])
-
   const expRenderData = useMemo(
     () =>
       experiences.map((exp, index) => {
-        const side = index % 2 === 0 ? 1 : -1
-        const x = side * (ROAD_WIDTH / 2 + SIDE_OFFSET)
+        const placement = city.experiences[index]
+        const frame = roadFrame(placement.distance)
+        const x = placement.side * EXPERIENCE_LATERAL
         const months = parsePeriodMonths(exp.period)
         const buildingHeight = monthsToHeight(months)
         const numFloors = Math.max(Math.ceil(months / 12), 1)
         const startYear = parseInt(exp.period.split('–')[0].trim().split(' ')[1])
-        const z = exp.position * roadLength
-        return { exp, index, side, x, buildingHeight, numFloors, startYear, z }
+        return {
+          exp,
+          index,
+          x,
+          buildingHeight,
+          numFloors,
+          startYear,
+          origin: [frame.point.x, 0, frame.point.z] as [number, number, number],
+          yaw: frame.yaw,
+          world: { x: placement.x, z: placement.z, yaw: frame.yaw, side: placement.side, buildingHeight },
+        }
       }),
-    [experiences, roadLength]
+    [experiences, city]
   )
 
+  // Timeline ticks painted along the road, one every 1.5 units, except at the join dates.
   const tickSpacing = 1.5
   const tickWidth = 1.2
   const tickX = ROAD_WIDTH * 0.25
   const timelineTicks = useMemo(() => {
-    const count = Math.floor(roadLength / tickSpacing)
-    const expZones = experiences.map((exp) => exp.position * roadLength)
+    const count = Math.floor(ROAD_LENGTH / tickSpacing)
+    const dates = city.experiences.map((p) => p.distance)
     const ticks: number[] = []
     for (let i = 0; i < count; i++) {
-      const z = i * tickSpacing
-      const nearDate = expZones.some((ez) => Math.abs(z - ez) < 1)
-      if (!nearDate) {
-        ticks.push(z)
-      }
+      const d = i * tickSpacing
+      if (!dates.some((ed) => Math.abs(d - ed) < 1)) ticks.push(d)
     }
     return ticks
-  }, [roadLength, experiences])
+  }, [city])
 
   const tickGeometry = useMemo(() => new THREE.PlaneGeometry(tickWidth, 0.06), [])
   const tickMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.3, depthTest: false }),
+    () => new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.3, depthWrite: false }),
     []
   )
   const tickRef = useRef<THREE.InstancedMesh>(null)
 
   useLayoutEffect(() => {
-    tickMaterial.color.set(isLight ? '#161616' : '#444444')
+    tickMaterial.color.set(isLight ? '#161616' : '#555555')
   }, [isLight, tickMaterial])
 
   useEffect(
     () => () => {
       material.dispose()
       ledgeMaterial.dispose()
+      railingMaterial.dispose()
+      awningMaterial.dispose()
       tickMaterial.dispose()
       tickGeometry.dispose()
     },
-    [material, ledgeMaterial, tickMaterial, tickGeometry]
+    [material, ledgeMaterial, railingMaterial, awningMaterial, tickMaterial, tickGeometry]
   )
 
-  // The pyramids and the light on them never move: bake its six shadow passes once.
-  const pyramidLightRef = useStaticShadow<THREE.PointLight>()
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mesh = tickRef.current
     if (!mesh || timelineTicks.length === 0) return
+    const local = new THREE.Matrix4().compose(
+      new THREE.Vector3(tickX, 0.01, 0),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)),
+      new THREE.Vector3(1, 1, 1)
+    )
+    const m = new THREE.Matrix4()
+    const up = new THREE.Vector3(0, 1, 0)
     for (let i = 0; i < timelineTicks.length; i++) {
-      dummy.position.set(tickX, 0.04, timelineTicks[i])
-      dummy.rotation.set(-Math.PI / 2, 0, 0)
-      dummy.scale.set(1, 1, 1)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
+      const f = roadFrame(timelineTicks[i])
+      m.makeRotationAxis(up, f.yaw).setPosition(f.point).multiply(local)
+      mesh.setMatrixAt(i, m)
     }
-    mesh.count = timelineTicks.length
     mesh.instanceMatrix.needsUpdate = true
-  }, [timelineTicks, dummy, tickX])
+    mesh.computeBoundingSphere()
+  }, [timelineTicks, tickX])
 
   return (
     <group>
       {timelineTicks.length > 0 && (
-        <instancedMesh ref={tickRef} args={[tickGeometry, tickMaterial, timelineTicks.length]} />
+        <instancedMesh ref={tickRef} args={[tickGeometry, tickMaterial, timelineTicks.length]} renderOrder={1} />
       )}
 
-      {/* Sized by the number of buildings actually placed. The former fixed capacity of
-          buildingCount * 12 was below the 12.4 * buildingCount the layout can produce. */}
-      <instancedMesh
-        key={positions.length}
-        ref={instancedRef}
-        args={[cityGeometry, material, positions.length]}
-        castShadow
-        receiveShadow
-        frustumCulled={false}
-      />
+      {/* The blocks near the road cast shadows; the skyline is too far away for them to show. */}
+      <CityBlocks specs={city.near} material={material} castShadow />
+      <CityBlocks specs={city.far} material={material} castShadow={false} />
 
       <BoxInstances boxes={city.cornices} material={ledgeMaterial} castShadow />
       <BoxInstances boxes={city.balconies} material={ledgeMaterial} castShadow />
       <BoxInstances boxes={city.railings} material={railingMaterial} />
       <BoxInstances boxes={city.awnings} material={awningMaterial} castShadow />
 
-      <group position={[0, 0, experiences[0] ? experiences[0].position * roadLength : 0]}>
-        <GizaPyramids theme={theme} />
-        <pointLight
-          ref={pyramidLightRef}
-          position={[60, 25, 18]}
-          color={isLight ? '#e0e0e0' : '#dddddd'}
-          intensity={isLight ? 5 : 20}
-          distance={60}
-          castShadow
-        />
-      </group>
+      <GizaPyramids pyramids={city.pyramids} theme={theme} />
+      {city.tower && <BerlinTVTower x={city.tower.x} z={city.tower.z} theme={theme} />}
 
-      <group position={[0, 0, experiences[4] ? experiences[4].position * roadLength : 0]}>
-        <BerlinTVTower theme={theme} />
-        <pointLight position={[48, 45, 2]} color={isLight ? '#d0d0d0' : '#dddddd'} intensity={isLight ? 5 : 22} distance={55} decay={1.2} />
-      </group>
-
-      {expRenderData.map(({ exp, index, x, buildingHeight, numFloors, startYear, z }) => {
+      {expRenderData.map(({ exp, index, x, buildingHeight, numFloors, startYear, origin, yaw }) => {
         const isActive = exp.id === activeExperienceId
 
         return (
-          <group key={exp.id} position={[0, 0, z]}>
+          <group key={exp.id} position={origin} rotation={[0, yaw, 0]}>
             <ExperienceBuilding
               x={x}
               width={5}
@@ -958,7 +847,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
             />
             {exp.logo && (
               <group position={[x, buildingHeight, 0]}>
-                <Logo3D logoUrl={exp.logo} isActive={isActive} theme={theme} />
+                <Logo3D logoUrl={exp.logo} isActive={isActive} theme={theme} parentYaw={yaw} />
               </group>
             )}
             <RoadDateMarking period={exp.period} isActive={isActive} theme={theme} />
@@ -967,7 +856,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
       })}
 
       <ActiveLights
-        active={expRenderData.find((d) => d.exp.id === activeExperienceId)}
+        active={expRenderData.find((d) => d.exp.id === activeExperienceId)?.world}
         isLight={isLight}
         enableShadows={perf.buildingShadows}
       />
