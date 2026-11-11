@@ -395,14 +395,15 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   }, [facade])
   useEffect(() => () => material.dispose(), [material])
 
-  const bodyColor = isActive ? (isLight ? '#ffffff' : '#666666') : (isLight ? '#e0e0e0' : '#111111')
-  const bodyEmissive = isActive ? (isLight ? '#dddddd' : '#222222') : (isLight ? '#000000' : '#000000')
+  // In focus: a step brighter than its neighbours, never blown out to pure white.
+  const bodyColor = isActive ? (isLight ? '#d2d2d2' : '#666666') : (isLight ? '#bcbcbc' : '#111111')
+  const bodyEmissive = isActive ? (isLight ? '#000000' : '#222222') : '#000000'
   const labelColor = isActive ? (isLight ? '#e8e8e8' : '#c0c0c0') : (isLight ? '#cccccc' : '#5a5a5a')
   const ledgeColor = isActive ? (isLight ? '#eeeeee' : '#4a4a4a') : (isLight ? '#cdcdcd' : '#1a1a1a')
 
   useLayoutEffect(() => {
     material.envMap = envMap
-    material.envMapIntensity = isLight ? 0.9 : 0.45
+    material.envMapIntensity = isLight ? 0.5 : 0.45
     material.color.set(bodyColor)
     material.emissive.set(bodyEmissive)
     material.emissiveIntensity = isActive ? 0.1 : 0
@@ -630,7 +631,7 @@ export function Buildings({ roadLength, experiences, activeExperienceId, theme, 
     const babbelZ = experiences[4] ? experiences[4].position * roadLength : -1000
     /** Most storeys allowed at a spot (Infinity = no limit). */
     const maxFloors = (x: number, z: number, frontage: boolean) => {
-      if (x > 0 && z > ldcZ - 25 && z < ldcZ + 85) return frontage ? 3 : 0
+      if (x > 0 && z > ldcZ - 25 && z < ldcZ + 85) return frontage ? 3 : x < 45 ? 3 : 0
       if (x > 0 && z > babbelZ - 10 && z < babbelZ + 60 && x < 60) return frontage ? Infinity : 4
       return Infinity
     }
