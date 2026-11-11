@@ -32,6 +32,10 @@ import {
 
 const BUILDING_WIDTH = 5
 
+/** Landmarks see through this share of the haze the city sees through (see fog.ts). */
+const LANDMARK_FOG_SCALE = 0.62
+const LANDMARK_DEFINES = { FOG_SCALE: LANDMARK_FOG_SCALE }
+
 /**
  * The walls used to carry a displacement map. A box has no vertices inside its faces, so the map
  * could not add relief: it only pulled every face inwards by this constant amount (in units of
@@ -53,9 +57,9 @@ const EXPERIENCE_STYLES: FacadeStyle[] = [
 
 /** City size per performance tier: the skyline grid spacing and how far out it reaches. */
 const DENSITY: Record<PerfPreset['tier'], CityDensity> = {
-  low: { skylineCell: 19, skylineReach: 170 },
-  medium: { skylineCell: 14, skylineReach: 210 },
-  high: { skylineCell: 12, skylineReach: 235 },
+  low: { lotsPerBlock: 2, skylineReach: 160 },
+  medium: { lotsPerBlock: 2, skylineReach: 205 },
+  high: { lotsPerBlock: 3, skylineReach: 240 },
 }
 
 /** Any number of boxes sharing one material, in a single draw. */
@@ -127,7 +131,7 @@ const CityBlocks = memo(function CityBlocks({
       dummy.scale.set(b.w, b.h, b.d).multiplyScalar(1 - 2 * PLASTER_INSET)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
-      mesh.setColorAt(i, color.setScalar(b.tone))
+      mesh.setColorAt(i, color.setRGB(b.color[0], b.color[1], b.color[2]))
     })
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
@@ -183,17 +187,19 @@ const GizaPyramids = memo(function GizaPyramids({ pyramids, theme }: { pyramids:
     texture.anisotropy = 4
     return texture
   }, [])
-  const material = useMemo(
-    () => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95, map: stone }),
-    [stone]
-  )
+  const material = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95, map: stone })
+    // Seen through less haze than the city, so they stay half-visible far away.
+    m.defines = { FOG_SCALE: LANDMARK_FOG_SCALE }
+    return m
+  }, [stone])
   const sand = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 1 }), [])
   useLayoutEffect(() => {
-    material.color.set(isLight ? '#9a9a9a' : '#3e3e3e')
-    material.emissive.set(isLight ? '#000000' : '#1c1c1c')
+    material.color.set(isLight ? '#d2bd98' : '#6a5a44')
+    material.emissive.set(isLight ? '#000000' : '#2a2117')
     material.emissiveMap = isLight ? null : stone
     material.needsUpdate = true
-    sand.color.set(isLight ? '#c6c6c6' : '#141414')
+    sand.color.set(isLight ? '#d9c9a8' : '#17130e')
   }, [isLight, material, sand, stone])
   useEffect(
     () => () => {
@@ -247,31 +253,32 @@ const BerlinTVTower = memo(function BerlinTVTower({ x, z, theme }: { x: number; 
   const shaftTop = sphereY - sphereR * 0.6
   const antennaBase = sphereY + sphereR + 7
 
-  const concrete = isLight ? '#9a9a9a' : '#4a4a4a'
-  const steel = isLight ? '#b8b8b8' : '#6a6a6a'
-  const nightGlow = isLight ? '#000000' : '#202020'
+  const concrete = isLight ? '#b9b4ac' : '#4c4944'
+  const steel = isLight ? '#c3cad0' : '#66707a'
+  const nightGlow = isLight ? '#000000' : '#1c1f24'
 
   return (
     <group position={[x, 0, z]}>
       {/* Base, flaring out to the ground. */}
       <mesh position={[0, 4, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[2.3, 4.2, 8, 24]} />
-        <meshStandardMaterial color={concrete} emissive={nightGlow} roughness={0.85} />
+        <meshStandardMaterial defines={LANDMARK_DEFINES} color={concrete} emissive={nightGlow} roughness={0.85} />
       </mesh>
       <mesh position={[0, 8 + (shaftTop - 8) / 2, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[1.45, 2.3, shaftTop - 8, 24]} />
-        <meshStandardMaterial color={concrete} emissive={nightGlow} roughness={0.85} />
+        <meshStandardMaterial defines={LANDMARK_DEFINES} color={concrete} emissive={nightGlow} roughness={0.85} />
       </mesh>
       <mesh position={[0, sphereY, 0]} castShadow receiveShadow>
         <sphereGeometry args={[sphereR, 32, 24]} />
-        <meshStandardMaterial color={steel} emissive={nightGlow} metalness={0.6} roughness={0.35} />
+        <meshStandardMaterial defines={LANDMARK_DEFINES} color={steel} emissive={nightGlow} metalness={0.6} roughness={0.35} />
       </mesh>
       {/* Window band of the restaurant and the viewing deck, lit at night. */}
       <mesh position={[0, sphereY - sphereR * 0.18, 0]}>
         <cylinderGeometry args={[sphereR * 1.005, sphereR * 0.97, 1.5, 32, 1, true]} />
         <meshStandardMaterial
+          defines={LANDMARK_DEFINES}
           color={isLight ? '#3a3a3a' : '#111111'}
-          emissive="#ffffff"
+          emissive="#f6d6a2"
           emissiveIntensity={isLight ? 0 : 1.4}
           roughness={0.2}
           metalness={0.5}
@@ -280,14 +287,14 @@ const BerlinTVTower = memo(function BerlinTVTower({ x, z, theme }: { x: number; 
       {/* Upper shaft and antenna, in bands. */}
       <mesh position={[0, (sphereY + antennaBase) / 2, 0]}>
         <cylinderGeometry args={[0.9, 1.2, antennaBase - sphereY, 16]} />
-        <meshStandardMaterial color={concrete} emissive={nightGlow} roughness={0.8} />
+        <meshStandardMaterial defines={LANDMARK_DEFINES} color={concrete} emissive={nightGlow} roughness={0.8} />
       </mesh>
       {Array.from({ length: 6 }, (_, i) => {
         const len = (H - antennaBase) / 6
         return (
           <mesh key={i} position={[0, antennaBase + len * (i + 0.5), 0]}>
             <cylinderGeometry args={[0.5 - i * 0.06, 0.56 - i * 0.06, len, 8]} />
-            <meshStandardMaterial color={i % 2 ? (isLight ? '#e8e8e8' : '#777777') : isLight ? '#555555' : '#2c2c2c'} roughness={0.6} />
+            <meshStandardMaterial defines={LANDMARK_DEFINES} color={i % 2 ? (isLight ? '#e8e8e8' : '#777777') : isLight ? '#555555' : '#2c2c2c'} roughness={0.6} />
           </mesh>
         )
       })}
@@ -503,10 +510,10 @@ const ExperienceBuilding = memo(function ExperienceBuilding({
   useEffect(() => () => material.dispose(), [material])
 
   // In focus: a step brighter than its neighbours, never blown out to pure white.
-  const bodyColor = isActive ? (isLight ? '#d2d2d2' : '#666666') : (isLight ? '#bcbcbc' : '#111111')
-  const bodyEmissive = isActive ? (isLight ? '#000000' : '#222222') : '#000000'
+  const bodyColor = isActive ? (isLight ? '#e9dfcf' : '#6e665c') : (isLight ? '#d3cbbf' : '#1a1815')
+  const bodyEmissive = isActive ? (isLight ? '#000000' : '#221e19') : '#000000'
   const labelColor = isActive ? (isLight ? '#e8e8e8' : '#c0c0c0') : (isLight ? '#cccccc' : '#5a5a5a')
-  const ledgeColor = isActive ? (isLight ? '#eeeeee' : '#4a4a4a') : (isLight ? '#cdcdcd' : '#1a1a1a')
+  const ledgeColor = isActive ? (isLight ? '#f2ece2' : '#4d4740') : (isLight ? '#d8d1c6' : '#1d1b18')
 
   useLayoutEffect(() => {
     material.envMap = envMap
@@ -721,10 +728,10 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
   // Theme colours are plain uniforms: set them without flagging the materials for a rebuild.
   // Layout effect so they are in place before the first frame.
   useLayoutEffect(() => {
-    material.color.set(isLight ? '#c8c8c8' : '#383838')
-    ledgeMaterial.color.set(isLight ? '#dcdcdc' : '#333333')
+    material.color.set(isLight ? '#d2d2d2' : '#3a3a3a')
+    ledgeMaterial.color.set(isLight ? '#e2ddd4' : '#35322e')
     railingMaterial.color.set(isLight ? '#8a8a8a' : '#202020')
-    awningMaterial.color.set(isLight ? '#a4a4a4' : '#1e1e1e')
+    awningMaterial.color.set(isLight ? '#8f6f62' : '#2a211d')
     material.envMapIntensity = isLight ? 0.8 : 0.35
     setFacadeTheme(facade, isLight)
   }, [isLight, material, ledgeMaterial, railingMaterial, awningMaterial, facade])

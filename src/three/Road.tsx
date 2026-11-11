@@ -55,7 +55,7 @@ export function Road({ theme }: RoadProps) {
           fog fades out, so the world has no visible edge. */}
       <mesh position={[0, ROAD_Y - 0.02, 160]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
-        <meshStandardMaterial color={isLight ? '#b4b4b4' : '#0b0b0b'} roughness={0.95} />
+        <meshStandardMaterial color={isLight ? '#b9b3a8' : '#0c0b0a'} roughness={0.95} />
       </mesh>
       <mesh geometry={geometry} receiveShadow>
         <meshStandardMaterial

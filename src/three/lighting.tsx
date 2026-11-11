@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js'
 import { END_LIGHT_HEIGHT } from './config'
 import { ROAD_LENGTH, roadFrame } from './path'
+import { SKY_HAZE } from './fog'
 import { useStaticShadow } from './shadows'
 
 const MOON_TEXTURE_URL = '/textures/moon.webp'
@@ -72,8 +73,12 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
         void main() {
           vec3 n = normalize(vWorldPosition);
           float h = n.y;
-          float t = clamp(h * 0.5 + 0.5, 0.0, 1.0);
+          // Haze colour at the horizon (it matches the fog, so the city melts into the sky),
+          // deepening towards the zenith, with a soft glow around the sun or moon.
+          float t = smoothstep(-0.02, 0.7, h);
           vec3 color = mix(bottomColor, topColor, t);
+          float glow = max(0.0, dot(n, celestialDir));
+          color += moonHighlight * (pow(glow, 6.0) * 0.35 + pow(glow, 60.0) * 0.6) * (1.0 - t * 0.5);
 
           // Flat plane projection for true perspective clouds
           float planeY = 150.0;
@@ -156,7 +161,7 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
         void main() {
           vec3 n = normalize(vWorldPosition);
           float h = n.y;
-          float t = clamp(h * 0.5 + 0.5, 0.0, 1.0);
+          float t = smoothstep(-0.02, 0.7, h);
           vec3 skyColor = mix(bottomColor, topColor, t);
 
           // Flat plane projection for inner clouds layer
@@ -191,10 +196,10 @@ export function SkyGradient({ theme }: { theme: 'light' | 'dark' }) {
   // Layout effect: the uniforms must hold the theme colours before the first frame is drawn.
   useLayoutEffect(() => {
     const isLight = theme === 'light'
-    material.uniforms.topColor.value.set(isLight ? '#cccccc' : '#000000')
-    material.uniforms.bottomColor.value.set(isLight ? '#ffffff' : '#0a0a0a')
+    material.uniforms.topColor.value.set(isLight ? '#7d9bba' : '#03060c')
+    material.uniforms.bottomColor.value.set(isLight ? SKY_HAZE.light : SKY_HAZE.dark)
     material.uniforms.celestialDir.value.copy(isLight ? SUN_DIR : MOON_DIR)
-    material.uniforms.moonHighlight.value.set(isLight ? '#ffffff' : '#444444')
+    material.uniforms.moonHighlight.value.set(isLight ? '#f3dfbf' : '#2c3850')
     innerMaterial.uniforms.topColor.value.copy(material.uniforms.topColor.value)
     innerMaterial.uniforms.bottomColor.value.copy(material.uniforms.bottomColor.value)
   }, [theme, material, innerMaterial])

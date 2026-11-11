@@ -40,8 +40,8 @@ export interface BuildingSpec {
   floorH: number
   bay: number
   style: FacadeStyle
-  /** Brightness of the wall colour. */
-  tone: number
+  /** Wall colour multiplier (linear RGB, around 1): muted plaster, brick, concrete, glass. */
+  color: [number, number, number]
 }
 
 export interface DetailBox {
@@ -201,8 +201,26 @@ interface SightLine {
 
 /** Densities per preset: the share of lots built on, and the spacing of the skyline grid. */
 export interface CityDensity {
-  skylineCell: number
+  /** Lots per side of a city block in the outer districts (2 to 4). */
+  lotsPerBlock: number
+  /** How far from the road the city reaches. */
   skylineReach: number
+}
+
+/**
+ * Muted, slightly desaturated wall colours, as real cities look under haze: creams and sand
+ * plaster, faded terracotta brick, warm and cool concrete, blue-grey curtain-wall frames.
+ */
+const PALETTE: Record<FacadeStyle, string[]> = {
+  [FACADE_STYLE.punched]: ['#f2e6d0', '#ead8c0', '#e8d3c8', '#dfe2d8', '#e6e1d8', '#d9dde2', '#efe0c4', '#e2d6cc'],
+  [FACADE_STYLE.brick]: ['#c99a86', '#b8846f', '#d1a48c', '#a9806c', '#c4a089', '#b48f80'],
+  [FACADE_STYLE.ribbon]: ['#dcdad5', '#cfd2d4', '#e4ded2', '#d6d3cb', '#c9ced2'],
+  [FACADE_STYLE.curtain]: ['#c9d2d8', '#bfc8cc', '#d5d8d6', '#b9c3cb'],
+}
+const paletteColor = (style: FacadeStyle, r: number, tone: number): [number, number, number] => {
+  const list = PALETTE[style]
+  const c = new THREE.Color(list[Math.floor(r * list.length) % list.length])
+  return [c.r * tone, c.g * tone, c.b * tone]
 }
 
 export function generateCity(experiences: Experience[], density: CityDensity): CityLayout {
@@ -368,7 +386,7 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
       floorH: CITY_FLOOR_HEIGHT,
       bay: bayWidth(style, rnd()),
       style,
-      tone: style === FACADE_STYLE.curtain ? 0.8 + 0.3 * rnd() : 0.72 + 0.5 * rnd(),
+      color: paletteColor(style, rnd(), style === FACADE_STYLE.curtain ? 0.85 + 0.25 * rnd() : 0.8 + 0.35 * rnd()),
     }
     list.push(b)
     return b
@@ -396,9 +414,6 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
   const rows = [
     { offset: FRONT + 14, floors: [4, 9] },
     { offset: FRONT + 25, floors: [5, 11] },
-    { offset: FRONT + 37, floors: [5, 14] },
-    { offset: FRONT + 50, floors: [6, 16] },
-    { offset: FRONT + 63, floors: [6, 18] },
   ]
   for (const row of rows) {
     for (const side of [1, -1]) {
@@ -414,15 +429,21 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
         const span = row.floors[1] - row.floors[0]
         const floors = row.floors[0] + Math.floor(rnd() * span * (0.4 + downtown))
         // An empty lot now and then: a square, a car park.
-        if (rnd() > 0.08) place(near, x, z, f.yaw + (rnd() - 0.5) * 0.08, across, along, floors, true)
-        d += along + 1 + rnd() * 3
+        if (rnd() > 0.04) place(near, x, z, f.yaw + (rnd() - 0.5) * 0.06, across, along, floors, true)
+        d += along + 0.4 + rnd() * 1.2
       }
     }
   }
 
-  // --- Skyline -------------------------------------------------------------------------------------
-  const cell = density.skylineCell
+  // --- The rest of the city: a street grid of full blocks -----------------------------------------
+  // Real cities are not scattered boxes: blocks of 24 x 32 units between 6 unit streets, each
+  // block divided into lots built wall to wall. Heights follow districts (low-rise quarters, a
+  // couple of downtowns with towers) and change little from one lot to its neighbour.
   const reach = density.skylineReach
+  const BLOCK_X = 24
+  const BLOCK_Z = 32
+  const STREET = 6
+  const split = density.lotsPerBlock
   let minX = Infinity
   let maxX = -Infinity
   let minZ = Infinity
@@ -433,26 +454,61 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
     minZ = Math.min(minZ, p.z)
     maxZ = Math.max(maxZ, p.z)
   }
+  const pitchX = BLOCK_X + STREET
+  const pitchZ = BLOCK_Z + STREET
   // Nothing behind the start: the camera never looks back there.
-  for (let gx = minX - reach; gx <= maxX + reach; gx += cell) {
-    for (let gz = Math.max(minZ - reach, -40); gz <= maxZ + reach; gz += cell) {
-      const x = gx + (rnd() - 0.5) * cell * 0.5
-      const z = gz + (rnd() - 0.5) * cell * 0.5
-      const { dist, yaw, beyondEnd } = nearestRoad(x, z)
-      // Past the end of the road the skyline closes the view; elsewhere it starts behind the rows.
-      if (dist < (beyondEnd ? FRONT + 12 : FRONT + 72) || dist > reach) {
-        rnd()
-        rnd()
-        rnd()
+  for (let bx = Math.floor((minX - reach) / pitchX) * pitchX; bx <= maxX + reach; bx += pitchX) {
+    for (let bz = Math.floor(Math.max(minZ - reach, -60) / pitchZ) * pitchZ; bz <= maxZ + reach; bz += pitchZ) {
+      const cx = bx + BLOCK_X / 2
+      const cz = bz + BLOCK_Z / 2
+      const blockDist = nearestRoad(cx, cz).dist
+      if (blockDist > reach + 20 || blockDist < FRONT) continue
+      const district = noise2(cx / 110, cz / 110)
+      const downtown = Math.max(0, district - 0.55) / 0.45
+      const blockFloors = 4 + Math.floor(district * 7 + rnd() * 3)
+      // A tower takes a whole block now and then, more often downtown.
+      if (rnd() < 0.04 + 0.35 * downtown) {
+        const floors = 16 + Math.floor(rnd() * 14 + downtown * 16)
+        const w = BLOCK_X * (0.55 + rnd() * 0.25)
+        const d = BLOCK_Z * (0.45 + rnd() * 0.25)
+        // Low podium around the tower, then the tower itself.
+        const list = blockDist < 60 ? near : far
+        place(list, cx, cz, 0, BLOCK_X - 0.6, BLOCK_Z - 0.6, 3 + Math.floor(rnd() * 2), blockDist < FRONT + 30)
+        const podium = list[list.length - 1]
+        if (podium && podium.x === cx && podium.z === cz) {
+          const cap = heightCap(cx, cz, Math.hypot(w, d) / 2)
+          const th = Math.min(floors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT, cap - podium.h)
+          if (th > 8) {
+            const style = rnd() < 0.6 ? FACADE_STYLE.curtain : FACADE_STYLE.ribbon
+            list.push({
+              ...podium,
+              w,
+              d,
+              y0: podium.h - PARAPET_HEIGHT,
+              h: th,
+              style,
+              bay: bayWidth(style, rnd()),
+              color: paletteColor(style, rnd(), 0.85 + 0.25 * rnd()),
+            })
+          }
+        }
         continue
       }
-      const downtown = noise2(x / 90, z / 90)
-      const tall = rnd() < 0.08 + 0.3 * downtown * downtown
-      const floors = tall ? 14 + Math.floor(rnd() * 16 * (0.5 + downtown)) : 5 + Math.floor(rnd() * 10 * (0.4 + downtown))
-      const w = cell * (0.45 + rnd() * 0.3)
-      const d = cell * (0.45 + rnd() * 0.3)
-      // Streets of the outer districts follow the nearest stretch of the avenue, give or take.
-      place(far, x, z, yaw + (rnd() < 0.3 ? Math.PI / 2 : 0), w, d, floors, false)
+      // Lots wall to wall: `split` across, a few more along the long side.
+      const nx = split
+      const nz = split + 1
+      const lw = BLOCK_X / nx
+      const ld = BLOCK_Z / nz
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < nz; j++) {
+          const x = bx + lw * (i + 0.5)
+          const z = bz + ld * (j + 0.5)
+          const dist = nearestRoad(x, z).dist
+          if (dist > reach) continue
+          const floors = Math.max(2, blockFloors + Math.floor((rnd() - 0.5) * 4) + (rnd() < 0.08 ? 6 : 0))
+          place(dist < 60 ? near : far, x, z, 0, lw - 0.3, ld - 0.3, floors, dist < FRONT + 30)
+        }
+      }
     }
   }
 

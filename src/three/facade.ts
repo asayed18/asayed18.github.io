@@ -79,18 +79,20 @@ export function createFacadeUniforms(): FacadeUniforms {
 
 /** Colours and lighting of the facades for each theme. Active = the building in focus. */
 export function setFacadeTheme(u: FacadeUniforms, isLight: boolean, isActive = false): void {
+  // Glass reflects a pale blue-grey sky by day; at night the lit rooms glow a soft warm white,
+  // like tungsten and warm LED behind curtains.
   if (isLight) {
-    u.uGlassColor.value.set(isActive ? '#9a9a9a' : '#5e5e5e')
+    u.uGlassColor.value.set(isActive ? '#9fb0bc' : '#66788a')
     u.uFrameTone.value = 0.78
     u.uLitRatio.value = isActive ? 1 : 0
     u.uLitStrength.value = isActive ? 0.35 : 0
-    u.uLitColor.value.set('#ffffff')
+    u.uLitColor.value.set('#fff1d8')
   } else {
-    u.uGlassColor.value.set(isActive ? '#1a1a1a' : '#060606')
+    u.uGlassColor.value.set(isActive ? '#1a2029' : '#06080c')
     u.uFrameTone.value = 1.7
-    u.uLitRatio.value = isActive ? 0.7 : 0.2
-    u.uLitStrength.value = isActive ? 1.05 : 0.55
-    u.uLitColor.value.set('#f2f2f2')
+    u.uLitRatio.value = isActive ? 0.7 : 0.22
+    u.uLitStrength.value = isActive ? 1.05 : 0.6
+    u.uLitColor.value.set('#f6d6a2')
   }
 }
 
