@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Vector2, type Mesh, type WebGLRenderer } from 'three'
+import { Color, Uniform, Vector2, type Mesh, type WebGLRenderer } from 'three'
 import {
   EffectComposer,
   N8AO,
@@ -14,9 +14,11 @@ import {
   DepthOfField,
   BrightnessContrast,
   GodRays,
+  wrapEffect,
 } from '@react-three/postprocessing'
 import {
   BlendFunction,
+  Effect,
   ToneMappingMode,
   type DepthOfFieldEffect,
   type EffectComposer as EffectComposerImpl,
@@ -25,6 +27,41 @@ import { cameraFocus } from './useSceneRig'
 import type { PerfPreset } from '../utils/devicePerf'
 import type { Theme } from '../theme'
 import { takeContinuous } from './pacing'
+
+/**
+ * Split toning, as colourists grade city footage: shadows pushed towards a cool blue-teal and
+ * highlights towards warm amber, weighted by luminance. In daylight it is a hint; at night it
+ * separates the sodium-lit windows and lamps from the moonlit walls.
+ */
+class SplitToneEffect extends Effect {
+  constructor({ shadows = '#6f86a8', highlights = '#e8c39a', strength = 0.3 } = {}) {
+    super(
+      'SplitToneEffect',
+      /* glsl */ `
+uniform vec3 uShadows;
+uniform vec3 uHighlights;
+uniform float uStrength;
+void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+  vec3 c = inputColor.rgb;
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float t = smoothstep(0.05, 0.75, l);
+  vec3 tint = mix(uShadows, uHighlights, t);
+  // Tints are normalised to their own luminance, so grading shifts hue, not brightness.
+  tint /= max(dot(tint, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
+  outputColor = vec4(mix(c, c * tint, uStrength), inputColor.a);
+}
+`,
+      {
+        uniforms: new Map<string, Uniform>([
+          ['uShadows', new Uniform(new Color(shadows))],
+          ['uHighlights', new Uniform(new Color(highlights))],
+          ['uStrength', new Uniform(strength)],
+        ]),
+      }
+    )
+  }
+}
+const SplitTone = wrapEffect(SplitToneEffect)
 
 interface PostProcessingProps {
   theme: Theme
@@ -297,6 +334,14 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
         />
       )
     }
+    list.push(
+      <SplitTone
+        key="split"
+        shadows={isLight ? '#7d8ea6' : '#4f6f9a'}
+        highlights={isLight ? '#efd2ae' : '#f0b878'}
+        strength={isLight ? 0.22 : 0.42}
+      />
+    )
     if (!isLight) list.push(<ToneMapping key="tone" mode={ToneMappingMode.ACES_FILMIC} />)
     list.push(<HueSaturation key="grade" saturation={-0.12} />)
     list.push(<BrightnessContrast key="contrast" brightness={isLight ? 0 : 0.02} contrast={isLight ? 0.08 : 0.12} />)
@@ -311,7 +356,12 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
         />
       )
     }
-    list.push(<Vignette key="vignette" offset={0.25} darkness={isLight ? 0.5 : 0.55} blendFunction={BlendFunction.NORMAL} />)
+    list.push(<Vignette
+        key="vignette"
+        offset={isLight ? 0.25 : 0.32}
+        darkness={isLight ? 0.5 : 0.92}
+        blendFunction={BlendFunction.NORMAL}
+      />)
     if (perf.tier !== 'low') {
       list.push(<Noise key="grain" blendFunction={BlendFunction.OVERLAY} opacity={isLight ? 0.12 : 0.18} />)
     }
