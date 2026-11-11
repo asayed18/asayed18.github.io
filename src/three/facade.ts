@@ -269,12 +269,13 @@ float facadeLit = 0.0;
 
 const FRAGMENT_ROUGHNESS = /* glsl */ `
 #include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.06, facadeGlass);
+// Slightly rough glass: still reflective, but a nearby light no longer burns a hard white spot.
+roughnessFactor = mix(roughnessFactor, 0.16, facadeGlass);
 `
 
 const FRAGMENT_METALNESS = /* glsl */ `
 #include <metalnessmap_fragment>
-metalnessFactor = mix(metalnessFactor, 0.9, facadeGlass);
+metalnessFactor = mix(metalnessFactor, 0.75, facadeGlass);
 `
 
 const FRAGMENT_EMISSIVE = /* glsl */ `

@@ -21,9 +21,13 @@ const ROAD_Y = -0.0305
 /** Size of one asphalt texture tile, in world units. */
 const ROAD_TILE = 2.5
 
+/** Side of the square ground plane: well past where the fog hides everything. */
+const GROUND_SIZE = 900
+
 export function Road({ length, theme }: RoadProps) {
   const geometry = useMemo(() => {
-    const g = new THREE.PlaneGeometry(ROAD_WIDTH * 10, length)
+    // Asphalt under the carriageway only; the city stands on the ground plane below.
+    const g = new THREE.PlaneGeometry(ROAD_WIDTH, length + 40)
     g.rotateX(-Math.PI / 2)
     return g
   }, [length])
@@ -40,10 +44,17 @@ export function Road({ length, theme }: RoadProps) {
   texture.forEach((tex) => {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping
     // One tile per 2.5 units in both directions: asphalt grain at the same scale as the city.
-    tex.repeat.set((ROAD_WIDTH * 10) / ROAD_TILE, length / ROAD_TILE)
+    tex.repeat.set(ROAD_WIDTH / ROAD_TILE, (length + 40) / ROAD_TILE)
   })
 
   return (
+    <>
+      {/* Ground under the city, the pyramids and the horizon: plain paving and earth that the
+          fog fades out, so the world has no visible edge. */}
+      <mesh position={[0, ROAD_Y - 0.02, length / 2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
+        <meshStandardMaterial color={theme === 'light' ? '#bdbdbd' : '#0a0a0a'} roughness={0.95} />
+      </mesh>
     <mesh geometry={geometry} position={[0, ROAD_Y, length / 2]} receiveShadow>
       <meshStandardMaterial
         map={texture[0]}
@@ -56,5 +67,6 @@ export function Road({ length, theme }: RoadProps) {
         metalness={theme === 'light' ? 0.05 : 0.3}
       />
     </mesh>
+    </>
   )
 }
