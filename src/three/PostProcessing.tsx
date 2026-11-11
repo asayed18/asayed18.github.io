@@ -384,7 +384,9 @@ export const PostProcessing = memo(function PostProcessing({ theme, perf, onRead
           />
         </mesh>
       )}
-      <EffectComposer ref={composerRef} enabled={compiled} multisampling={0}>
+      {/* 4x multisampling on fast GPUs: thin edges (window bars, railings, roof lines) stop crawling
+          as the camera moves. SMAA alone works on the finished image and cannot recover them. */}
+      <EffectComposer ref={composerRef} enabled={compiled} multisampling={perf.tier === 'high' ? 4 : 0}>
         {effects}
       </EffectComposer>
     </>
