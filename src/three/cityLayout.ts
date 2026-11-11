@@ -107,6 +107,10 @@ export interface CityLayout {
   crossings: DetailBox[]
   parks: GroundPatch[]
   trees: Tree[]
+  /** Plant rooms, stair bulkheads and air-conditioning units on the flat roofs. */
+  rooftopBoxes: DetailBox[]
+  /** Water tanks on the roofs (unit cylinders). */
+  rooftopTanks: DetailBox[]
 }
 
 /** Height of the Fernsehturm model, base to antenna tip. */
@@ -232,6 +236,8 @@ export interface CityDensity {
   lotsPerBlock: number
   /** How far from the road the city reaches. */
   skylineReach: number
+  /** Share of the park and side-street trees that are planted (0 to 1). */
+  greenery: number
 }
 
 /**
@@ -307,18 +313,21 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
   if (placements[0]) {
     const plan = [
       // angle (deg), distance, height: Khufu, Khafre, Menkaure, in their real proportions.
-      { a: 25, dist: 125, h: 44 },
-      { a: 36, dist: 160, h: 42 },
-      { a: 45, dist: 172, h: 20 },
+      // Spread out so each silhouette stands on its own, as from the Giza plateau viewpoint.
+      { a: 20, dist: 150, h: 38 },
+      { a: 42, dist: 200, h: 36 },
+      { a: 55, dist: 215, h: 16 },
     ]
     for (const step of plan) {
       const at = besideView(0, THREE.MathUtils.degToRad(step.a), step.dist)
-      // A square base 1.57 times the height, turned to face the viewer at 45 degrees.
+      // A square base 1.57 times the height. One face is turned almost square to the viewer
+      // (the cone's corners are on its axes, hence the eighth of a turn), with a little of the
+      // next face showing so the edge between them reads.
       const radius = (step.h * 1.57) / Math.SQRT2
-      pyramids.push({ x: at.x, z: at.z, height: step.h, radius, yaw: at.view + Math.PI / 4 })
-      clearings.push({ x: at.x, z: at.z, r: radius + 22 })
+      pyramids.push({ x: at.x, z: at.z, height: step.h, radius, yaw: at.view + Math.PI / 4 + 0.14 })
+      clearings.push({ x: at.x, z: at.z, r: radius + 14 })
       // Keep the top two thirds of each pyramid clear of the city.
-      sights.push({ ex: at.eye.x, ey: at.eye.y, ez: at.eye.z, tx: at.x, ty: step.h * 0.32, tz: at.z, halfWidth: radius * 0.8 })
+      sights.push({ ex: at.eye.x, ey: at.eye.y, ez: at.eye.z, tx: at.x, ty: step.h * 0.32, tz: at.z, halfWidth: radius * 0.6 })
     }
   }
 
@@ -379,8 +388,10 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
     const r = Math.hypot(w, d) / 2
     const cap = heightCap(x, z, r)
     const capFloors = Math.floor((cap - PARAPET_HEIGHT) / CITY_FLOOR_HEIGHT)
-    floors = Math.min(floors, capFloors)
-    if (floors < 1) return null
+    if (capFloors < 1) return null
+    // Under a sight line, do not shave every roof to the same line: a real skyline is ragged,
+    // so most buildings there stop one to three storeys short of what the view allows.
+    if (floors > capFloors) floors = Math.max(capFloors - Math.floor(rnd() * 3.4), Math.min(capFloors, 2))
     const fp = Lots.make(x, z, yaw, w, d)
     if (lots.overlaps(fp)) return null
     if (checkRoad) {
@@ -520,6 +531,7 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
 
   // --- Street wall ---------------------------------------------------------------------------------
   const frontage: { b: BuildingSpec; side: number }[] = []
+  const squares: GroundPatch[] = []
   for (const side of [1, -1]) {
     let d = -ROAD_LEAD_IN + 1
     while (d < ROAD_LENGTH + ROAD_LEAD_OUT - 2) {
@@ -529,6 +541,21 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
       const x = f.point.x + f.left.x * side * (FRONT + across / 2)
       const z = f.point.z + f.left.z * side * (FRONT + across / 2)
       const floors = 3 + Math.floor(rnd() * 4)
+      // A small square on the avenue now and then: lawn, trees, a hedge along the sidewalk.
+      if (rnd() < 0.13 && !placements.some((pl) => Math.abs(pl.distance - d) < 16)) {
+        const len = 11 + rnd() * 5
+        const depth = 9 + rnd() * 3
+        const g = roadFrame(d + len / 2)
+        const gx = g.point.x + g.left.x * side * (FRONT + depth / 2)
+        const gz = g.point.z + g.left.z * side * (FRONT + depth / 2)
+        const fp = Lots.make(gx, gz, g.yaw, depth, len)
+        if (!lots.overlaps(fp) && heightCap(gx, gz, 6) > 0) {
+          lots.add(fp)
+          squares.push({ x: gx, z: gz, yaw: g.yaw, width: depth, length: len })
+          d += len + 0.05
+          continue
+        }
+      }
       const b = place(near, x, z, f.yaw, across, along, floors, true)
       if (b) frontage.push({ b, side })
       // Wall to wall; past a side street or a plaza, try again a metre further on.
@@ -568,7 +595,13 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
   const parks: GroundPatch[] = []
   const trees: Tree[] = []
   const addTree = (x: number, z: number, scale = 1) => {
+    if (rnd() > density.greenery) return
     trees.push({ x, z, trunk: (1.6 + rnd() * 1.2) * scale, crown: (1.3 + rnd() * 0.9) * scale, tone: rnd() })
+  }
+  /** A shrub: a crown sitting almost on the ground. */
+  const addBush = (x: number, z: number) => {
+    if (rnd() > density.greenery) return
+    trees.push({ x, z, trunk: 0.15 + rnd() * 0.2, crown: 0.5 + rnd() * 0.35, tone: rnd() })
   }
   // Nothing behind the start: the camera never looks back there.
   for (let bx = gridX0; bx <= maxX + reach; bx += pitchX) {
@@ -581,13 +614,26 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
       const district = noise2(cx / 110, cz / 110)
       const downtown = Math.max(0, district - 0.55) / 0.45
       const blockFloors = 4 + Math.floor(district * 7 + rnd() * 3)
-      if (blockDist > nearZone && blockDist < 150 && heightCap(cx, cz, 20) > 0 && rnd() < 0.08 * (1 - downtown)) {
+      if (blockDist > nearZone && blockDist < 200 && heightCap(cx, cz, 20) > 0 && rnd() < 0.3 * (1 - 0.7 * downtown)) {
         const fp = Lots.make(cx, cz, 0, BLOCK_X - 0.4, BLOCK_Z - 0.4)
         if (!lots.overlaps(fp)) {
           lots.add(fp)
           parks.push({ x: cx, z: cz, yaw: 0, width: BLOCK_X - 0.4, length: BLOCK_Z - 0.4 })
-          const count = 10 + Math.floor(rnd() * 8)
-          for (let i = 0; i < count; i++) addTree(cx + (rnd() - 0.5) * (BLOCK_X - 4), cz + (rnd() - 0.5) * (BLOCK_Z - 4), 1.2)
+          // Trees in loose groves, shrubs along the edges of the lawn.
+          const groves = 3 + Math.floor(rnd() * 3)
+          for (let g = 0; g < groves; g++) {
+            const gx = cx + (rnd() - 0.5) * (BLOCK_X - 8)
+            const gz = cz + (rnd() - 0.5) * (BLOCK_Z - 8)
+            const count = 4 + Math.floor(rnd() * 5)
+            for (let i = 0; i < count; i++) addTree(gx + (rnd() - 0.5) * 9, gz + (rnd() - 0.5) * 9, 1.1 + rnd() * 0.3)
+          }
+          for (let i = 0; i < 16; i++) {
+            const t = rnd()
+            const edge = rnd() < 0.5
+            const sx = edge ? (t - 0.5) * (BLOCK_X - 2) : (rnd() < 0.5 ? -1 : 1) * (BLOCK_X / 2 - 1.2)
+            const sz = edge ? (rnd() < 0.5 ? -1 : 1) * (BLOCK_Z / 2 - 1.2) : (t - 0.5) * (BLOCK_Z - 2)
+            addBush(cx + sx, cz + sz)
+          }
           continue
         }
       }
@@ -637,6 +683,19 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
     }
   }
 
+  // Plant the squares on the avenue.
+  for (const sq of squares) {
+    parks.push(sq)
+    const c = Math.cos(sq.yaw)
+    const s = Math.sin(sq.yaw)
+    const local = (lx: number, lz: number): [number, number] => [sq.x + lx * c + lz * s, sq.z - lx * s + lz * c]
+    const count = 5 + Math.floor(rnd() * 4)
+    for (let i = 0; i < count; i++) addTree(...local((rnd() - 0.5) * (sq.width - 3), (rnd() - 0.5) * (sq.length - 3)), 0.9 + rnd() * 0.4)
+    for (let t = -sq.length / 2 + 0.8; t < sq.length / 2 - 0.5; t += 1.1) {
+      for (const lx of [-sq.width / 2 + 0.6, sq.width / 2 - 0.6]) addBush(...local(lx, t))
+    }
+  }
+
   // --- Infill: close the leftover gaps near the avenue ------------------------------------------------
   // Where the rows along the curve meet the straight grid, odd-shaped gaps remain. Fill them with
   // smaller buildings, as a real city fills every leftover lot; now and then a pocket park.
@@ -651,12 +710,13 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
       if (nr.dist < FRONT + 1 || nr.dist > infillReach || nr.beyondEnd || probe(jx, jz)) continue
       const yaw = nr.dist < nearZone + 4 ? nr.yaw : 0
       const district = noise2(jx / 110, jz / 110)
-      if (rnd() < 0.025 && nr.dist > FRONT + 12) {
+      if (rnd() < 0.12 && nr.dist > FRONT + 12) {
         const fp = Lots.make(jx, jz, yaw, 8, 8)
         if (!lots.overlaps(fp) && heightCap(jx, jz, 6) > 0) {
           lots.add(fp)
           parks.push({ x: jx, z: jz, yaw, width: 8, length: 8 })
-          for (let i = 0; i < 4; i++) addTree(jx + (rnd() - 0.5) * 5, jz + (rnd() - 0.5) * 5)
+          for (let i = 0; i < 5; i++) addTree(jx + (rnd() - 0.5) * 5.5, jz + (rnd() - 0.5) * 5.5)
+          for (let i = 0; i < 5; i++) addBush(jx + (rnd() - 0.5) * 7, jz + (rnd() - 0.5) * 7)
           continue
         }
       }
@@ -681,25 +741,33 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
   // buildings the camera stops at.
   for (const side of [1, -1]) {
     const first = (side === 1 ? 13 : 6) - ROAD_LEAD_IN
-    for (let d = first; d < ROAD_LENGTH + ROAD_LEAD_OUT - 4; d += 14) {
+    // Two trees between each pair of lamps (the lamps stand 14 units apart).
+    for (let k = 0, d = first - 3; d < ROAD_LENGTH + ROAD_LEAD_OUT - 4; k++, d = first + Math.floor(k / 2) * 14 + (k % 2 ? 3 : -3)) {
       if (placements.some((pl) => Math.abs(pl.distance - d) < 11)) continue
       const f = roadFrame(d)
       const x = f.point.x + f.left.x * side * (ROAD_WIDTH / 2 + 1.35)
       const z = f.point.z + f.left.z * side * (ROAD_WIDTH / 2 + 1.35)
       if (!treeClear(x, z)) continue
       trees.push({ x, z, trunk: 2.1 + rnd() * 0.5, crown: 1.25 + rnd() * 0.35, tone: rnd() })
+      // Planters either side of the tree.
+      for (const off of [-1.5, 1.5]) {
+        const g = roadFrame(d + off)
+        const bx = g.point.x + g.left.x * side * (ROAD_WIDTH / 2 + 1.5)
+        const bz = g.point.z + g.left.z * side * (ROAD_WIDTH / 2 + 1.5)
+        if (treeClear(bx, bz)) trees.push({ x: bx, z: bz, trunk: 0.18, crown: 0.45 + rnd() * 0.15, tone: rnd() })
+      }
     }
   }
   // Along the side streets near the avenue.
   for (const s of streets) {
     const ax = Math.sin(s.yaw)
     const az = Math.cos(s.yaw)
-    for (let t = -s.length / 2 + 4; t < s.length / 2 - 3; t += 8) {
+    for (let t = -s.length / 2 + 4; t < s.length / 2 - 3; t += 6) {
       for (const lat of [-2.25, 2.25]) {
         const x = s.x + ax * t + az * lat
         const z = s.z + az * t - ax * lat
         const dist = nearestRoad(x, z).dist
-        if (dist < FRONT + 2 || dist > 90 || inClearing(x, z, 2) || rnd() < 0.2) continue
+        if (dist < FRONT + 2 || dist > 140 || inClearing(x, z, 2) || rnd() < 0.05 || rnd() > density.greenery) continue
         trees.push({ x, z, trunk: 1.8 + rnd() * 0.6, crown: 1.0 + rnd() * 0.3, tone: rnd() })
       }
     }
@@ -716,6 +784,62 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
       const th = tierFloors * CITY_FLOOR_HEIGHT + PARAPET_HEIGHT - 0.01
       if (b.h + th > cap) continue
       list.push({ ...b, w: b.w * 0.66, d: b.d * 0.66, y0: b.h - PARAPET_HEIGHT, h: th })
+    }
+  }
+
+  // --- Roof clutter: flat roofs are never empty ---------------------------------------------------------
+  const rooftopBoxes: DetailBox[] = []
+  const rooftopTanks: DetailBox[] = []
+  {
+    const key = (x: number, z: number, y: number) => `${x.toFixed(2)},${z.toFixed(2)},${y.toFixed(2)}`
+    const tierBases = new Set<string>()
+    for (const list of [near, far]) for (const b of list) if (b.y0 > 0) tierBases.add(key(b.x, b.z, b.y0))
+    for (const list of [near, far]) {
+      const isNear = list === near
+      for (const b of list) {
+        const top = b.y0 + b.h
+        if (tierBases.has(key(b.x, b.z, top - PARAPET_HEIGHT)) || b.w < 4 || b.d < 4) continue
+        if (!isNear && rnd() < 0.4) continue
+        const cap = heightCap(b.x, b.z, Math.hypot(b.w, b.d) / 2)
+        const c = Math.cos(b.yaw)
+        const s = Math.sin(b.yaw)
+        const at = (sx: number, sz: number): [number, number] => {
+          const lx = (rnd() - 0.5) * Math.max(b.w - sx - 1.2, 0)
+          const lz = (rnd() - 0.5) * Math.max(b.d - sz - 1.2, 0)
+          return [b.x + lx * c + lz * s, b.z - lx * s + lz * c]
+        }
+        const items = Math.min(1 + Math.floor(rnd() * 3), Math.floor((b.w * b.d) / 18))
+        let bulkhead = false
+        for (let i = 0; i < items; i++) {
+          const kind = rnd()
+          if (kind < 0.3 && !bulkhead && b.style !== FACADE_STYLE.curtain) {
+            // Stair and lift bulkhead.
+            bulkhead = true
+            const [sx, sy, sz] = [2 + rnd() * 1.2, 2.4 + rnd() * 0.6, 2.2 + rnd() * 1.4]
+            if (top + sy > cap) continue
+            const [x, z] = at(sx, sz)
+            rooftopBoxes.push({ pos: [x, top + sy / 2, z], scale: [sx, sy, sz], yaw: b.yaw })
+          } else if (kind < 0.45 && b.style !== FACADE_STYLE.curtain) {
+            // Water tank.
+            const r = 0.7 + rnd() * 0.4
+            const hT = 1.6 + rnd() * 0.8
+            if (top + hT + 0.4 > cap) continue
+            const [x, z] = at(2 * r, 2 * r)
+            rooftopTanks.push({ pos: [x, top + 0.4 + hT / 2, z], scale: [2 * r, hT, 2 * r], yaw: 0 })
+            rooftopBoxes.push({ pos: [x, top + 0.2, z], scale: [2 * r + 0.2, 0.4, 2 * r + 0.2], yaw: b.yaw })
+          } else {
+            // Air-conditioning units, often in a row.
+            const n = 1 + Math.floor(rnd() * 3)
+            const [sx, sy, sz] = [1.1 + rnd() * 0.5, 0.8 + rnd() * 0.4, 0.9 + rnd() * 0.4]
+            if (top + sy > cap) continue
+            const [x, z] = at(sx * n + 0.3 * n, sz)
+            for (let k = 0; k < n; k++) {
+              const off = (k - (n - 1) / 2) * (sx + 0.3)
+              rooftopBoxes.push({ pos: [x + off * c, top + sy / 2, z - off * s], scale: [sx, sy, sz], yaw: b.yaw })
+            }
+          }
+        }
+      }
     }
   }
 
@@ -780,6 +904,8 @@ export function generateCity(experiences: Experience[], density: CityDensity): C
     crossings,
     parks,
     trees,
+    rooftopBoxes,
+    rooftopTanks,
   }
 }
 

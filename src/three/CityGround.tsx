@@ -106,7 +106,7 @@ function createCrownGeometry(): THREE.BufferGeometry {
   const rnd = seeded(3)
   const cards: THREE.BufferGeometry[] = []
   const centre = new THREE.Vector3(0, -0.15, 0)
-  for (let i = 0; i < 44; i++) {
+  for (let i = 0; i < 36; i++) {
     const card = new THREE.PlaneGeometry(1.25, 1.25)
     const dir = new THREE.Vector3(rnd() * 2 - 1, rnd() * 1.6 - 0.6, rnd() * 2 - 1).normalize()
     const depth = 0.3 + rnd() * 0.5
@@ -161,7 +161,7 @@ interface CityGroundProps {
 
 /**
  * The ground between the blocks: side streets in the avenue's asphalt, lawns of the parks, zebra
- * crossings on the avenue and the street trees. Five draws for the whole city.
+ * crossings on the avenue, and the street trees. Five draws for the whole city.
  */
 export const CityGround = memo(function CityGround({ streets, parks, crossings, trees, theme }: CityGroundProps) {
   const isLight = theme === 'light'

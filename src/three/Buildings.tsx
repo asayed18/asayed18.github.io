@@ -47,6 +47,7 @@ const LANDMARK_DEFINES = { FOG_SCALE: LANDMARK_FOG_SCALE }
 const PLASTER_INSET = 0.0077
 
 const UNIT_BOX_GEOMETRY = new THREE.BoxGeometry(1, 1, 1)
+const UNIT_CYLINDER_GEOMETRY = new THREE.CylinderGeometry(0.5, 0.5, 1, 14)
 
 /** Facade of each experience building, in order along the road. */
 const EXPERIENCE_STYLES: FacadeStyle[] = [
@@ -59,9 +60,9 @@ const EXPERIENCE_STYLES: FacadeStyle[] = [
 
 /** City size per performance tier: the skyline grid spacing and how far out it reaches. */
 const DENSITY: Record<PerfPreset['tier'], CityDensity> = {
-  low: { lotsPerBlock: 2, skylineReach: 160 },
-  medium: { lotsPerBlock: 2, skylineReach: 205 },
-  high: { lotsPerBlock: 3, skylineReach: 240 },
+  low: { lotsPerBlock: 2, skylineReach: 160, greenery: 0.55 },
+  medium: { lotsPerBlock: 2, skylineReach: 205, greenery: 0.8 },
+  high: { lotsPerBlock: 3, skylineReach: 240, greenery: 1 },
 }
 
 /** Any number of boxes sharing one material, in a single draw. */
@@ -69,10 +70,13 @@ const BoxInstances = memo(function BoxInstances({
   boxes,
   material,
   castShadow = false,
+  geometry = UNIT_BOX_GEOMETRY,
 }: {
   boxes: DetailBox[]
   material: THREE.Material
   castShadow?: boolean
+  /** Any unit-sized shape; boxes by default. */
+  geometry?: THREE.BufferGeometry
 }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
@@ -94,7 +98,7 @@ const BoxInstances = memo(function BoxInstances({
     <instancedMesh
       key={boxes.length}
       ref={ref}
-      args={[UNIT_BOX_GEOMETRY, material, boxes.length]}
+      args={[geometry, material, boxes.length]}
       castShadow={castShadow}
       receiveShadow
     />
@@ -160,56 +164,92 @@ interface BuildingsProps {
 }
 
 /**
- * The Giza pyramids: a square base 1.57 times the height, in weathered limestone. At night they are
- * floodlit, as they are for real.
+ * Limestone masonry painted in the shader, in world space: courses of blocks about one unit high
+ * with staggered joints, each block a slightly different tone, large weathered patches, rubble
+ * at the foot. Joints fade out with distance instead of shimmering. At night the pyramids are
+ * floodlit from the ground, as they are for real: the light is strongest at the base.
+ */
+function applyMasonry(material: THREE.MeshStandardMaterial, flood: { value: THREE.Color }) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFlood = flood
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vStoneWorld;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vStoneWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `#include <common>
+varying vec3 vStoneWorld;
+uniform vec3 uFlood;
+float stoneHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float stoneNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(stoneHash(i), stoneHash(i + vec2(1.0, 0.0)), f.x), mix(stoneHash(i + vec2(0.0, 1.0)), stoneHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`
+      )
+      .replace(
+        '#include <map_fragment>',
+        /* glsl */ `#include <map_fragment>
+float stoneHeight = vStoneWorld.y;
+{
+  // The face this fragment lies on, and the horizontal direction along it.
+  vec3 faceN = normalize(cross(dFdx(vStoneWorld), dFdy(vStoneWorld)));
+  vec2 along2 = normalize(vec2(-faceN.z, faceN.x) + 1e-5);
+  float course = stoneHeight / 1.05;
+  float row = floor(course);
+  float u = dot(vStoneWorld.xz, along2) / 1.9 + row * 0.37;
+  vec2 f = vec2(fract(u), fract(course));
+  vec2 id = vec2(floor(u), row);
+  float fade = 1.0 - smoothstep(0.25, 0.7, fwidth(course));
+  float joint = max(1.0 - smoothstep(0.0, 0.14, f.y), (1.0 - smoothstep(0.0, 0.07, f.x)) * 0.7);
+  // Each course steps back: its top edge catches the light, its foot sits in shadow.
+  float lip = smoothstep(0.75, 1.0, f.y);
+  float tone = 0.86 + 0.22 * stoneHash(id);
+  float weather = 0.8 + 0.3 * stoneNoise(vec2(u * 0.12, course * 0.1)) + 0.1 * stoneNoise(vec2(u, course) * 0.9);
+  // Rubble and drifted sand at the foot.
+  float foot = 1.0 - 0.25 * (1.0 - smoothstep(0.0, 5.0, stoneHeight));
+  float stone = mix(1.0, tone * (1.0 - 0.4 * joint) * (1.0 + 0.12 * lip), fade);
+  diffuseColor.rgb *= stone * weather * foot;
+}`
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `#include <emissivemap_fragment>
+totalEmissiveRadiance += uFlood * diffuseColor.rgb * (0.25 + 0.75 * exp(-stoneHeight / 13.0));`
+      )
+  }
+  material.customProgramCacheKey = () => 'masonry-v1'
+}
+
+/**
+ * The Giza pyramids: a square base 1.57 times the height, in weathered limestone, well apart from
+ * each other. At night they are floodlit.
  */
 const GizaPyramids = memo(function GizaPyramids({ pyramids, theme }: { pyramids: Pyramid[]; theme: Theme }) {
   const isLight = theme === 'light'
-  // Courses of weathered limestone blocks, painted once on a canvas.
-  const stone = useMemo(() => {
-    const size = 256
-    const canvas = document.createElement('canvas')
-    canvas.width = canvas.height = size
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#bdbdbd'
-    ctx.fillRect(0, 0, size, size)
-    const courses = 48
-    for (let i = 0; i < courses; i++) {
-      const y = (i / courses) * size
-      ctx.fillStyle = `rgba(0,0,0,${0.22 + 0.15 * Math.abs(Math.sin(i * 7.3))})`
-      ctx.fillRect(0, y, size, 1.2)
-      // Block joints and wear along the course.
-      for (let x = 0; x < size; x += 6 + ((i * 13 + x) % 7)) {
-        ctx.fillStyle = `rgba(${(x * 31 + i * 17) % 2 ? '255,255,255' : '0,0,0'},${0.04 + ((x * 7 + i) % 5) * 0.015})`
-        ctx.fillRect(x, y + 1.2, 6, size / courses - 1.2)
-      }
-    }
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.colorSpace = THREE.SRGBColorSpace
-    texture.anisotropy = 4
-    return texture
-  }, [])
+  const flood = useMemo(() => ({ value: new THREE.Color(0, 0, 0) }), [])
   const material = useMemo(() => {
-    const m = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95, map: stone })
+    const m = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95 })
+    applyMasonry(m, flood)
     // Seen through less haze than the city, so they stay half-visible far away.
     m.defines = { FOG_SCALE: LANDMARK_FOG_SCALE }
     return m
-  }, [stone])
+  }, [flood])
   const sand = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 1 }), [])
   useLayoutEffect(() => {
-    material.color.set(isLight ? '#d2bd98' : '#b39c78')
-    material.emissive.set(isLight ? '#000000' : '#6b4f2c')
-    material.emissiveMap = isLight ? null : stone
-    material.needsUpdate = true
+    material.color.set(isLight ? '#dcc59c' : '#c9b188')
+    // Warm sodium floodlights at night; nothing by day.
+    flood.value.set(isLight ? '#000000' : '#c98a3c').multiplyScalar(isLight ? 0 : 0.55)
     sand.color.set(isLight ? '#d9c9a8' : '#8f8166')
-  }, [isLight, material, sand, stone])
+  }, [isLight, material, sand, flood])
   useEffect(
     () => () => {
       material.dispose()
       sand.dispose()
-      stone.dispose()
     },
-    [material, sand, stone]
+    [material, sand]
   )
   const cone = useMemo(() => new THREE.ConeGeometry(1, 1, 4, 1), [])
   useEffect(() => () => cone.dispose(), [cone])
@@ -735,6 +775,7 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
   const ledgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.85 }), [])
   const railingMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.2 }), [])
   const awningMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }), [])
+  const roofKitMaterial = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.25 }), [])
 
   // Theme colours are plain uniforms: set them without flagging the materials for a rebuild.
   // Layout effect so they are in place before the first frame.
@@ -743,9 +784,10 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
     ledgeMaterial.color.set(isLight ? '#e2ddd4' : '#b3aca1')
     railingMaterial.color.set(isLight ? '#8a8a8a' : '#5c5c5c')
     awningMaterial.color.set(isLight ? '#8f6f62' : '#7d6054')
+    roofKitMaterial.color.set(isLight ? '#b4b2ad' : '#8c8a86')
     material.envMapIntensity = isLight ? 0.8 : 0.5
     setFacadeTheme(facade, isLight)
-  }, [isLight, material, ledgeMaterial, railingMaterial, awningMaterial, facade])
+  }, [isLight, material, ledgeMaterial, railingMaterial, awningMaterial, roofKitMaterial, facade])
 
   const expRenderData = useMemo(
     () =>
@@ -804,10 +846,11 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
       ledgeMaterial.dispose()
       railingMaterial.dispose()
       awningMaterial.dispose()
+      roofKitMaterial.dispose()
       tickMaterial.dispose()
       tickGeometry.dispose()
     },
-    [material, ledgeMaterial, railingMaterial, awningMaterial, tickMaterial, tickGeometry]
+    [material, ledgeMaterial, railingMaterial, awningMaterial, roofKitMaterial, tickMaterial, tickGeometry]
   )
 
   useLayoutEffect(() => {
@@ -843,8 +886,16 @@ export function Buildings({ experiences, activeExperienceId, theme, perf }: Buil
       <BoxInstances boxes={city.balconies} material={ledgeMaterial} castShadow />
       <BoxInstances boxes={city.railings} material={railingMaterial} />
       <BoxInstances boxes={city.awnings} material={awningMaterial} castShadow />
+      <BoxInstances boxes={city.rooftopBoxes} material={roofKitMaterial} castShadow />
+      <BoxInstances boxes={city.rooftopTanks} material={roofKitMaterial} geometry={UNIT_CYLINDER_GEOMETRY} castShadow />
 
-      <CityGround streets={city.streets} parks={city.parks} crossings={city.crossings} trees={city.trees} theme={theme} />
+      <CityGround
+        streets={city.streets}
+        parks={city.parks}
+        crossings={city.crossings}
+        trees={city.trees}
+        theme={theme}
+      />
 
       <GizaPyramids pyramids={city.pyramids} theme={theme} />
       {city.tower && <BerlinTVTower x={city.tower.x} z={city.tower.z} theme={theme} />}
