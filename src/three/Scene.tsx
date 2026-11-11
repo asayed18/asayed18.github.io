@@ -69,12 +69,12 @@ export const Scene = memo(function Scene({
 
       {/* Sky and ground bounce instead of a flat ambient term: tops of things lighter than their
           undersides, as outdoors. */}
-      <hemisphereLight args={[isLight ? '#dfe8f2' : '#7f93b8', isLight ? '#8a7f70' : '#2a241c', isLight ? 0.8 : 0.42]} />
+      <hemisphereLight args={[isLight ? '#dfe8f2' : '#7f93b8', isLight ? '#8a7f70' : '#2a241c', isLight ? 0.8 : 0.35]} />
 
       {/* Primary directional light aligned with sun/moon – casts onto road and buildings */}
       <directionalLight
         ref={mainLightRef}
-        intensity={isLight ? 2.7 : 0.95}
+        intensity={isLight ? 2.7 : 0.8}
         color={isLight ? '#fff0d9' : '#c4d2ee'}
         castShadow
         shadow-mapSize-width={perf.shadowMapSize}
@@ -95,7 +95,7 @@ export const Scene = memo(function Scene({
           camera's view, so the extra shadow pass and lookup never changed a visible pixel. */}
       <directionalLight
         position={theme === 'light' ? [-8, 20, -15] : [8, 20, -15]}
-        intensity={theme === 'light' ? 0.45 : 0.2}
+        intensity={theme === 'light' ? 0.45 : 0.17}
       />
 
       <CelestialBody isLight={theme === 'light'} segments={perf.celestialSegments} />
