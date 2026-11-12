@@ -341,7 +341,10 @@ float facadeAO = 1.0;
     float lod = smoothstep(0.035, 0.14, max(aa.x, aa.y));
 
     // Follow the ray to the first wall, floor or ceiling of that room.
-    vec3 ro = vec3((id.x + g.x - roomIdx * span) * colW, g.y * floorH, 0.0);
+    // The entry point stays inside the room. Seen from the side, g leaves the bay; a start outside
+    // the room gives a negative distance, hit.z far behind the glass, and exp() of it overflows
+    // to infinity. Infinity times zero is NaN, which bloom then spreads over the whole frame.
+    vec3 ro = vec3(clamp((id.x + g.x - roomIdx * span) * colW, 0.0, W), clamp(g.y * floorH, 0.0, H), 0.0);
     float tx = abs(du) > 1e-4 ? (du > 0.0 ? W - ro.x : -ro.x) / du : 1e5;
     float ty = abs(dv) > 1e-4 ? (dv > 0.0 ? H - ro.y : -ro.y) / dv : 1e5;
     float tz = D / dn;
